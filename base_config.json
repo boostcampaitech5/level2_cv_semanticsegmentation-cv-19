@@ -1,0 +1,31 @@
+{
+    "name": "Baseline",
+    "seed": 21,
+    "epochs": 250,
+    "early_stop": 10,
+    "save_interval": 1,
+    "log_interval": 20,
+    "dataset": "XRayDataset",
+    "batch_size": 8,
+    "model": "UNet",
+    "criterion": [
+        "bce_with_logit"
+    ],
+    "optimizer": {
+        "type": "AdamW",
+        "args": {
+            "lr": 1e-3,
+            "weight_decay": 1e-4
+        }
+    },
+    "lr_scheduler": {
+        "type": "ReduceLROnPlateau",
+        "args": {
+            "mode": "min",
+            "factor": 0.1,
+            "patience": 5,
+            "verbose": true
+        }
+    },
+    "num_workers": 8
+}

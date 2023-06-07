@@ -1,0 +1,8 @@
+opencv_python
+pandas
+matplotlib
+tqdm
+scikit-learn
+albumentations
+black
+wandb
