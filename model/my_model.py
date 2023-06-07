@@ -119,4 +119,3 @@ class MyModel(BaseModel):
 
     def forward(self, x):
         return x
-
