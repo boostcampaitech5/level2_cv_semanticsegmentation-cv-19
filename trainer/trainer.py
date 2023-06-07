@@ -81,13 +81,15 @@ class Trainer(BaseTrainer):
             if batch_idx % self.log_step == 0:
                 print(f"Train Epoch: {epoch}/{self.args.epochs} {self._progress(batch_idx)} Loss: {total_loss.item():.6f}")
                 log_dict = self.train_metrics.result()
-                wandb.log({"Iter_train_Loss": log_dict["Loss"]})
+                if self.args.is_wandb:
+                    wandb.log({"Iter_train_Loss": log_dict["Loss"]})
             if batch_idx == self.len_epoch:
                 break
 
         # 한 epoch 지난 이후, 반환할 결과 df 저장
         log = self.train_metrics.result()
-        wandb.log({"Epoch_Train_Loss": log["Loss"]})
+        if self.args.is_wandb:
+            wandb.log({"Epoch_Train_Loss": log["Loss"]})
         print("Train Epoch: {}, Loss: {:.6f}".format(epoch, self.train_metrics.result()["Loss"]))
         print(f"train time per epoch: {time.time()-start:.3f}s")
         print()
@@ -95,11 +97,13 @@ class Trainer(BaseTrainer):
         if self.do_validation:
             val_log = self._valid_epoch(epoch)
             log.update(**{"val_" + k: v for k, v in val_log.items()})  # val_log output도 넣어서 반환
-            wandb.log({"Epoch_val_" + k: v for k, v in val_log.items()})  # Epoch_val_Loss, Epoch_val_DiceCoef
+            if self.args.is_wandb:
+                wandb.log({"Epoch_val_" + k: v for k, v in val_log.items()})  # Epoch_val_Loss, Epoch_val_DiceCoef
 
         print()
         if self.lr_scheduler is not None:
-            wandb.log({"lr": self.optimizer.param_groups[0]["lr"]})
+            if self.args.is_wandb:
+                wandb.log({"lr": self.optimizer.param_groups[0]["lr"]})
             self.lr_scheduler.step(log["val_Loss"])
 
         return log

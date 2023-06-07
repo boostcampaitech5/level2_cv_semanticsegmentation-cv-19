@@ -1,9 +1,9 @@
+import argparse
 import glob
 import json
 import os
 import random
 import re
-from argparse import ArgumentParser
 from importlib import import_module
 from pathlib import Path
 
@@ -18,8 +18,19 @@ from trainer.trainer import Trainer
 from utils.util import ensure_dir
 
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    elif v.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    else:
+        raise argparse.ArgumentTypeError("Boolean value expected.")
+
+
 def parse_args():
-    parser = ArgumentParser()
+    parser = argparse.ArgumentParser()
 
     # Data and model checkpoints directories
     parser.add_argument("--config", type=str, default="./configs/queue/base_config.json", help="config file address")
@@ -34,6 +45,7 @@ def parse_args():
     parser.add_argument("--early_stop", type=int, default=config["early_stop"], help="Early stop training when 10 epochs no improvement")
     parser.add_argument("--save_interval", type=int, default=config["save_interval"], help="Model save interval")
     parser.add_argument("--log_interval", type=int, default=config["log_interval"], help="Wandb logging interva(step)")
+    parser.add_argument("--is_wandb", type=str2bool, default=config["is_wandb"], help="determine whether log at Wandb or not")
     parser.add_argument("--dataset", type=str, default=config["dataset"], help="dataset augmentation type (default: SceneTextDataset)")
     parser.add_argument("--batch_size", type=int, default=config["batch_size"], help="input batch size for training (default: 64)")
 
@@ -83,7 +95,8 @@ def increment_path(path, exist_ok=False):
 
 
 def main(args):
-    wandb.init(entity="cv-19", project="segmentation-pytorch", name=args.name, config=vars(args))
+    if args.is_wandb:
+        wandb.init(entity="cv-19", project="segmentation-pytorch", name=args.name, config=vars(args))
 
     seed_everything(args.seed)
     save_dir = increment_path(os.path.join(args.model_dir, args.name))  # ./outputs/exp_name
