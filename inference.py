@@ -1,26 +1,27 @@
 import argparse
 import json
-import multiprocessing
 import os
 from importlib import import_module
+
 import albumentations as A
-import cv2
+import constants
 import numpy as np
 import pandas as pd
 import torch
-from torchvision.transforms import CenterCrop, Compose, Normalize, ToTensor
-from datasets.base_dataset import XRayInferenceDataset
 import torch.nn.functional as F
-import constants
+from datasets.base_dataset import XRayInferenceDataset
+
+
 def load_model(saved_model, device):
-    model_module_name = "model."+ model_name.lower() + "_custom"
-    model_module = getattr(import_module(model_module_name), model_name)  
+    model_module_name = "model." + model_name.lower() + "_custom"
+    model_module = getattr(import_module(model_module_name), model_name)
     model = model_module().to(device)
 
     model_path = os.path.join(saved_model, "best.pth")
     model.load_state_dict(torch.load(model_path, map_location=device))
 
     return model
+
 
 def encode_mask_to_rle(mask):
     """
@@ -48,6 +49,7 @@ def decode_rle_to_mask(rle, height, width):
 
     return img.reshape(height, width)
 
+
 def test(model, data_loader, thr=0.5):
     model = model.to(device)
     model.eval()
@@ -72,6 +74,7 @@ def test(model, data_loader, thr=0.5):
 
     return rles, filename_and_class
 
+
 @torch.no_grad()
 def inference(data_dir, args):
     model = load_model(exp_path, device)
@@ -79,13 +82,7 @@ def inference(data_dir, args):
     img_root = os.path.join(data_dir, "test/DCM")
     transform = A.Resize(*args.resize)
     dataset = XRayInferenceDataset(img_path=img_root, transforms=transform)
-    loader = torch.utils.data.DataLoader(
-        dataset=dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=2,
-        drop_last=False
-    )
+    loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=args.batch_size, shuffle=False, num_workers=2, drop_last=False)
     print("Calculating inference results..")
     rles, filename_and_class = test(model, loader)
     classes, filename = zip(*[x.split("_") for x in filename_and_class])
@@ -100,6 +97,7 @@ def inference(data_dir, args):
     save_path = os.path.join(exp_path, "output.csv")
     df.to_csv(save_path, index=False)
     print(f"Inference Done! Inference result saved at {save_path}")
+
 
 # python inference.py --exp Baseline
 if __name__ == "__main__":
@@ -120,11 +118,11 @@ if __name__ == "__main__":
     parser.add_argument("--data_dir", type=str, default=os.environ.get("SM_CHANNEL_EVAL", "/opt/ml/data"))
 
     args = parser.parse_args()
-    exp_path = os.path.join('./outputs',args.exp)
-    json_file = next((file for file in os.listdir(exp_path) if file.endswith('.json')), None)
+    exp_path = os.path.join("./outputs", args.exp)
+    json_file = next((file for file in os.listdir(exp_path) if file.endswith(".json")), None)
     if json_file:
         json_path = os.path.join(exp_path, json_file)
-        with open(json_path, 'r') as f:
+        with open(json_path, "r") as f:
             config = json.load(f)
     model_name = config["model"]
     data_dir = args.data_dir
