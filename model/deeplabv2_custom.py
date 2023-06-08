@@ -1,8 +1,6 @@
-import torch
+import constants
 import torch.nn as nn
 import torch.nn.functional as F
-
-import constants
 from model.base_model import BaseModel
 
 
@@ -116,7 +114,7 @@ class AtrousSpatialPyramidPooling(nn.Module):
 
 # DeepLabV2 model        
 class DeepLabV2(BaseModel):
-    def __init__(self, in_channels, num_classes=len(constants.CLASSES)):
+    def __init__(self, in_channels=3, num_classes=len(constants.CLASSES)):
         super().__init__()
         self.backbone = ResNet101(in_channels)
         self.aspp = AtrousSpatialPyramidPooling(2048, num_classes)

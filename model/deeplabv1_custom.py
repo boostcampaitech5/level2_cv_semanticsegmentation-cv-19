@@ -1,8 +1,6 @@
-import torch
+import constants
 import torch.nn as nn
 import torch.nn.functional as F
-
-import constants
 from model.base_model import BaseModel
 
 
@@ -71,7 +69,7 @@ class Classifier(nn.Module):
 
 # DeepLabV1 model
 class DeepLabV1(BaseModel):
-    def __init__(self, backbone, classifier, upsampling=8):
+    def __init__(self, backbone=VGG16(), classifier=Classifier(), upsampling=8):
         super(DeepLabV1, self).__init__()
         self.backbone = backbone
         self.classifier = classifier

@@ -1,8 +1,7 @@
+import constants
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-import constants
 from model.base_model import BaseModel
 
 
@@ -190,7 +189,7 @@ class Decoder(nn.Module):
 
 # DeepLabV3+ model(Encoder + Decoder)    
 class DeepLabV3p(BaseModel):
-    def __init__(self, in_channels, num_classes=len(constants.CLASSES)):
+    def __init__(self, in_channels=3, num_classes=len(constants.CLASSES)):
         super().__init__()
         self.backbone = Xception(in_channels)
         self.aspp = AtrousSpatialPyramidPooling(2048)
