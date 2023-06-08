@@ -49,7 +49,7 @@ def parse_args():
     parser.add_argument(
         "--augmentation", type=str, default=config["augmentation"], help="dataset augmentation type (default: BaseAugmentation)"
     )
-    parser.add_argument("--resize", type=list, default=config["resize"], help="img resize shape (default: [512,512])")
+    # parser.add_argument("--resize", type=list, default=config["resize"], help="img resize shape (default: [512,512])")
     parser.add_argument("--batch_size", type=int, default=config["batch_size"], help="input batch size for training (default: 64)")
 
     parser.add_argument("--model", type=str, default=config["model"], help="model type (default: UNet)")

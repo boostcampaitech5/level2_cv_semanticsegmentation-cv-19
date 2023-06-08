@@ -147,3 +147,39 @@ class XRayDataset(Dataset):
             image[class_label == 1] = constants.PALETTE[i]
 
         return image
+
+class XRayInferenceDataset(Dataset):
+    def __init__(self, img_path, transforms=None):
+        pngs = {
+            os.path.relpath(os.path.join(root, fname), start=img_path)
+            for root, _dirs, files in os.walk(img_path)
+            for fname in files
+            if os.path.splitext(fname)[1].lower() == ".png"
+        }
+        _filenames = pngs
+        _filenames = np.array(sorted(_filenames))
+        self.img_path = img_path
+        self.filenames = _filenames
+        self.transforms = transforms
+
+    def __len__(self):
+        return len(self.filenames)
+
+    def __getitem__(self, item):
+        image_name = self.filenames[item]
+        image_path = os.path.join(self.img_path, image_name)
+
+        image = cv2.imread(image_path)
+        image = image / 255.0
+
+        if self.transforms is not None:
+            inputs = {"image": image}
+            result = self.transforms(**inputs)
+            image = result["image"]
+
+        # to tenser will be done later
+        image = image.transpose(2, 0, 1)  # make channel first
+
+        image = torch.from_numpy(image).float()
+
+        return image, image_name
