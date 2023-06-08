@@ -3,67 +3,100 @@ import json
 import multiprocessing
 import os
 from importlib import import_module
-
+import albumentations as A
+import cv2
+import numpy as np
 import pandas as pd
 import torch
 from torchvision.transforms import CenterCrop, Compose, Normalize, ToTensor
-
-
+from datasets.base_dataset import XRayInferenceDataset
+import torch.nn.functional as F
+import constants
 def load_model(saved_model, device):
-    model = getattr(import_module("model.my_model"), args.model)
-
+    model_module = getattr(import_module("model.my_model"), args.model)
+    model = model_module().to(device)
     model_path = os.path.join(saved_model, "best.pth")
     model.load_state_dict(torch.load(model_path, map_location=device))
 
     return model
 
+def encode_mask_to_rle(mask):
+    """
+    mask: numpy array binary mask
+    1 - mask
+    0 - background
+    Returns encoded run length
+    """
+    pixels = mask.flatten()
+    pixels = np.concatenate([[0], pixels, [0]])
+    runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
+    runs[1::2] -= runs[::2]
+    return " ".join(str(x) for x in runs)
 
-@torch.no_grad()
-def inference(data_dir, model_dir, args):
-    """ """
-    use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda" if use_cuda else "cpu")
 
-    model = load_model(model_dir, device).to(device)
+def decode_rle_to_mask(rle, height, width):
+    s = rle.split()
+    starts, lengths = [np.asarray(x, dtype=int) for x in (s[0:][::2], s[1:][::2])]
+    starts -= 1
+    ends = starts + lengths
+    img = np.zeros(height * width, dtype=np.uint8)
+
+    for lo, hi in zip(starts, ends):
+        img[lo:hi] = 1
+
+    return img.reshape(height, width)
+
+def test(model, data_loader, thr=0.5):
+    model = model.to(device)
     model.eval()
 
-    os.path.join(data_dir, "test/DCM")
-
-    info_path = os.path.join(data_dir, "info.csv")
-    info = pd.read_csv(info_path)
-
-    img_paths = [os.path.join(img_root, img_id) for img_id in info.ImageID]
-
-    transform = Compose(
-        [
-            CenterCrop((360, 360)),
-            # Resize(resize, Image.BILINEAR),
-            ToTensor(),
-            Normalize(mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246)),
-        ]
-    )
-    dataset = TestDataset(img_paths, args.resize, transform=transform)
-    loader = torch.utils.data.DataLoader(
-        dataset,
-        batch_size=args.batch_size,
-        num_workers=multiprocessing.cpu_count() // 2,
-        shuffle=False,
-        pin_memory=use_cuda,
-        drop_last=False,
-    )
-
-    print("Calculating inference results..")
-    preds = []
+    rles = []
+    filename_and_class = []
     with torch.no_grad():
-        for idx, images in enumerate(loader):
-            images = images.to(device)
-            pred = model(images)
-            pred = pred.argmax(dim=-1)
-            preds.extend(pred.cpu().numpy())
+        for _, (images, image_names) in enumerate(data_loader):
+            images = images.cuda()
+            outputs = model(images)
 
-    info["ans"] = preds
-    save_path = os.path.join(model_dir, "output.csv")
-    info.to_csv(save_path, index=False)
+            # restore original size
+            outputs = F.interpolate(outputs, size=(2048, 2048), mode="bilinear")
+            outputs = torch.sigmoid(outputs)
+            outputs = (outputs > thr).detach().cpu().numpy()
+
+            for output, image_name in zip(outputs, image_names):
+                for c, segm in enumerate(output):
+                    rle = encode_mask_to_rle(segm)
+                    rles.append(rle)
+                    filename_and_class.append(f"{constants.IND2CLASS[c]}_{image_name}")
+
+    return rles, filename_and_class
+
+@torch.no_grad()
+def inference(data_dir, args):
+    model = load_model(exp_path, device)
+
+    img_root = os.path.join(data_dir, "test/DCM")
+    transform = A.Resize(*args.resize)
+    dataset = XRayInferenceDataset(img_path=img_root, transforms=transform)
+    loader = torch.utils.data.DataLoader(
+        dataset=dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=2,
+        drop_last=False
+    )
+    print("Calculating inference results..")
+    rles, filename_and_class = test(model, loader)
+    classes, filename = zip(*[x.split("_") for x in filename_and_class])
+    image_name = [os.path.basename(f) for f in filename]
+    df = pd.DataFrame(
+        {
+            "image_name": image_name,
+            "class": classes,
+            "rle": rles,
+        }
+    )
+    save_path = os.path.join(exp_path, "output.csv")
+    df.to_csv(save_path, index=False)
     print(f"Inference Done! Inference result saved at {save_path}")
 
 
@@ -71,26 +104,28 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # Data and model checkpoints directories
-    parser.add_argument("--exp", type=str, default="./experiment/exp", help="exp directory address")
+    use_cuda = torch.cuda.is_available()
+    device = torch.device("cuda" if use_cuda else "cpu")
+    parser.add_argument("--device", type=str, default=device, help="device (cuda or cpu)")
+    parser.add_argument("--exp", type=str, default="Baseline", help="exp directory address")
     args = parser.parse_args()
-    with open(os.path.join(args.exp, "config.json"), "r") as f:
-        config = json.load(f)
-
-    print(f"model dir: {config['model_dir']}")
-
-    parser.add_argument("--batch_size", type=int, default=256, help="input batch size for validing (default: 1000)")
+    exp_path = os.path.join('./outputs',args.exp)
+    json_file = next((file for file in os.listdir(exp_path) if file.endswith('.json')), None)
+    if json_file:
+        json_path = os.path.join(exp_path, json_file)
+        with open(json_path, 'r') as f:
+            config = json.load(f)
+    parser.add_argument("--batch_size", type=int, default=8, help="input batch size for validing (default: 1000)")
     parser.add_argument(
-        "--resize", type=tuple, default=config["resize"], help="resize size for image when you trained (default: (96, 128))"
+        "--resize", type=tuple, default=(512,512), help="resize size for image when you trained (default: (96, 128))"
     )
     parser.add_argument("--model", type=str, default=config["model"], help="model type (default: BaseModel)")
 
     # Container environment
     parser.add_argument("--data_dir", type=str, default=os.environ.get("SM_CHANNEL_EVAL", "/opt/ml/data"))
-    parser.add_argument("--model_dir", type=str, default=config["model_dir"])
 
     args = parser.parse_args()
 
     data_dir = args.data_dir
-    model_dir = args.model_dir
-
-    inference(data_dir, model_dir, args)
+    device = args.device
+    inference(data_dir, args)
