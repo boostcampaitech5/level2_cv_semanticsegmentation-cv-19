@@ -1,7 +1,6 @@
 import json
 import os
 
-import albumentations as A
 import cv2
 import numpy as np
 import torch
@@ -9,6 +8,7 @@ from sklearn.model_selection import GroupKFold
 from torch.utils.data import Dataset
 
 import constants
+from datasets.augmentation import BaseAugmentation
 
 
 # root로부터 png, json을 읽고 순서를 matching해서 반환
@@ -71,15 +71,6 @@ def split_filename(is_train, pngs, jsons):
 
     return [train_filenames, train_labelnames] if is_train else [valid_filenames, valid_labelnames]
 
-# Normalize를 할 경우, cv2.imread에서 에러 발생, OpenCV depth of image unsupported (CV_64F)
-BaseAugmentation = A.Compose(
-    [
-        A.Resize(512, 512),
-        # A.ColorJitter(0.5, 0.5, 0.5, 0.25),
-        # A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
-    ]
-)
-
 
 class XRayDataset(Dataset):
     def __init__(self, IMAGE_ROOT, LABEL_ROOT, transforms=BaseAugmentation, is_train=False):
@@ -90,6 +81,12 @@ class XRayDataset(Dataset):
 
         pngs, jsons = collect_img_json(IMAGE_ROOT, LABEL_ROOT)
         self.filenames, self.labelnames = split_filename(is_train, pngs, jsons)
+
+    def set_transform(self, transforms):
+        self.transforms = transforms
+
+    def get_transform(self):
+        return self.transforms
 
     def __len__(self):
         return len(self.filenames)

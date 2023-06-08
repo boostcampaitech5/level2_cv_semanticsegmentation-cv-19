@@ -10,7 +10,9 @@ from torchvision.transforms import CenterCrop, Compose, Normalize, ToTensor
 
 
 def load_model(saved_model, device):
-    model = getattr(import_module("model.my_model"), args.model)
+    model_file_name = args.model.lower()+ "_custom" #custom
+    model_name = "model."+model_file_name
+    model = getattr(import_module(model_name), args.model)  
 
     model_path = os.path.join(saved_model, "best.pth")
     model.load_state_dict(torch.load(model_path, map_location=device))
