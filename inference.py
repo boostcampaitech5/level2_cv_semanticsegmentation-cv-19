@@ -13,9 +13,9 @@ from datasets.base_dataset import XRayInferenceDataset
 import torch.nn.functional as F
 import constants
 def load_model(saved_model, device):
-    model_file_name = args.model.lower()+ "_custom" #custom
-    model_name = "model."+model_file_name
-    model = getattr(import_module(model_name), args.model)  
+    model_name = "model."+ args.model.lower()+ "_custom"
+    model_module = getattr(import_module(model_name), args.model)  
+    model = model_module().to(device)
 
     model_path = os.path.join(saved_model, "best.pth")
     model.load_state_dict(torch.load(model_path, map_location=device))
@@ -108,8 +108,8 @@ if __name__ == "__main__":
     # Data and model checkpoints directories
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
-    parser.add_argument("--device", type=str, default=device, help="device (cuda or cpu)")
     parser.add_argument("--exp", type=str, default="Baseline", help="exp directory address")
+    parser.add_argument("--device", type=str, default=device, help="device (cuda or cpu)")
     args = parser.parse_args()
     exp_path = os.path.join('./outputs',args.exp)
     json_file = next((file for file in os.listdir(exp_path) if file.endswith('.json')), None)
