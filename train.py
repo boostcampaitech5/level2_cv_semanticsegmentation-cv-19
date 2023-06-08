@@ -128,7 +128,9 @@ def main(args):
     valid_loader = DataLoader(dataset=valid_dataset, batch_size=1, shuffle=False, num_workers=2, drop_last=False)
 
     # -- model
-    model_module = getattr(import_module("model.my_model"), args.model)  # default: UNet
+    model_file_name = args.model.lower()+ "_custom" #custom
+    model_name = "model."+model_file_name
+    model_module = getattr(import_module(model_name), args.model)  # default: UNet
     model = model_module().to(device)
 
     # -- loss & metric
