@@ -46,7 +46,11 @@ def parse_args():
     parser.add_argument("--save_interval", type=int, default=config["save_interval"], help="Model save interval")
     parser.add_argument("--log_interval", type=int, default=config["log_interval"], help="Wandb logging interva(step)")
     parser.add_argument("--is_wandb", type=str2bool, default=config["is_wandb"], help="determine whether log at Wandb or not")
-    parser.add_argument("--dataset", type=str, default=config["dataset"], help="dataset augmentation type (default: SceneTextDataset)")
+    parser.add_argument("--dataset", type=str, default=config["dataset"], help="dataset type (default: XRayDataset)")
+    parser.add_argument(
+        "--augmentation", type=str, default=config["augmentation"], help="dataset augmentation type (default: BaseAugmentation)"
+    )
+    parser.add_argument("--resize", type=list, default=config["resize"], help="img resize shape (default: [512,512])")
     parser.add_argument("--batch_size", type=int, default=config["batch_size"], help="input batch size for training (default: 64)")
 
     parser.add_argument("--model", type=str, default=config["model"], help="model type (default: UNet)")
@@ -115,7 +119,11 @@ def main(args):
     valid_dataset = dataset_module(IMAGE_ROOT, LABEL_ROOT, is_train=False)
 
     # -- augmentation
-    # transform_module = getattr(import_module("datasets.base_dataset"), args.augmentation)  # default: BaseAugmentation
+    transform_module = getattr(import_module("datasets.augmentation"), args.augmentation)  # default: BaseAugmentation
+    transform = transform_module
+
+    train_dataset.set_transform(transform)
+    valid_dataset.set_transform(transform)
 
     # -- data_loader
     train_loader = DataLoader(
@@ -128,7 +136,9 @@ def main(args):
     valid_loader = DataLoader(dataset=valid_dataset, batch_size=1, shuffle=False, num_workers=2, drop_last=False)
 
     # -- model
-    model_module = getattr(import_module("model.my_model"), args.model)  # default: UNet
+    model_file_name = args.model.lower() + "_custom"  # custom
+    model_name = "model." + model_file_name
+    model_module = getattr(import_module(model_name), args.model)  # default: UNet
     model = model_module().to(device)
 
     # -- loss & metric
@@ -145,11 +155,11 @@ def main(args):
     metrics = [DiceCoef()]
 
     # -- logging
-    # with open(os.path.join(save_dir, "config.json"), "w", encoding="utf-8") as f:
-    #     args_dict = vars(args)
-    #     args_dict["model_dir"] = save_dir
-    #     args_dict["TestAugmentation"] = val_set.dataset.get_transform().__str__()
-    #     json.dump(args_dict, f, ensure_ascii=False, indent=4)
+    with open(os.path.join(save_dir, "config.json"), "w", encoding="utf-8") as f:
+        args_dict = vars(args)
+        args_dict["model_dir"] = save_dir
+        args_dict["TestAugmentation"] = valid_dataset.get_transform().__str__()
+        json.dump(args_dict, f, ensure_ascii=False, indent=4)
 
     # --train
     trainer = Trainer(
