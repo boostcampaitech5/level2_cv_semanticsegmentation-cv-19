@@ -9,11 +9,10 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch import cuda
-from torch.utils.data import DataLoader
-
 import wandb
 from losses.base_loss import DiceCoef, create_criterion
+from torch import cuda
+from torch.utils.data import DataLoader
 from trainer.trainer import Trainer
 from utils.util import ensure_dir
 
