@@ -17,7 +17,7 @@ def load_model(saved_model, device):
     model_module = getattr(import_module(model_module_name), model_name)
     model = model_module().to(device)
 
-    model_path = os.path.join(saved_model, "best.pth")
+    model_path = os.path.join(saved_model, args.weights)
     model.load_state_dict(torch.load(model_path, map_location=device))
 
     return model
