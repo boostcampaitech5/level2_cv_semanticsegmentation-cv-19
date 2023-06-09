@@ -50,7 +50,7 @@ def collect_img_json(IMAGE_ROOT, LABEL_ROOT, is_train=True):
 root_dir = "/opt/ml/data_all"
 ensure_dir(root_dir)
 
-which_img = "test"  # "test"
+which_img = "train"  # "test"
 img_root = os.path.join(root_dir, f"{which_img}/img")
 label_root = os.path.join(root_dir, f"{which_img}/label")
 ensure_dir(img_root)
