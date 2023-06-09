@@ -116,3 +116,4 @@ wandb/
 outputs/
 configs/
 codebook/
+log*.txt
