@@ -63,9 +63,10 @@ if which_img == "train":
     pngs, jsons = collect_img_json(IMAGE_ROOT, LABEL_ROOT, is_train=True)
 
     for png, json in zip(pngs, jsons):
-        # print(os.path.join(IMAGE_ROOT, png), os.path.join(root_dir, png.split("/")[-1]))
-        os.system(f"cp  {os.path.join(IMAGE_ROOT, png)} {os.path.join(img_root, png.split('/')[-1])}")
-        os.system(f"cp {os.path.join(LABEL_ROOT, json)} {os.path.join(label_root, json.split('/')[-1])}")
+        # print(os.path.join(IMAGE_ROOT, png), os.path.join(root_dir, "_".join(png.split("/"))))
+
+        os.system(f"cp  {os.path.join(IMAGE_ROOT, png)} {os.path.join(img_root, '_'.join(png.split('/')))}")
+        os.system(f"cp {os.path.join(LABEL_ROOT, json)} {os.path.join(label_root, '_'.join(png.split('/')))}")
 else:
     pngs = collect_img_json(IMAGE_ROOT, LABEL_ROOT, is_train=False)
 
