@@ -45,6 +45,7 @@ def parse_args():
     parser.add_argument("--save_interval", type=int, default=config["save_interval"], help="Model save interval")
     parser.add_argument("--log_interval", type=int, default=config["log_interval"], help="Wandb logging interva(step)")
     parser.add_argument("--is_wandb", type=str2bool, default=config["is_wandb"], help="determine whether log at Wandb or not")
+    parser.add_argument("--is_debug", type=str2bool, default=config["is_debug"], help="determine whether debugging mode or not")
     parser.add_argument("--dataset", type=str, default=config["dataset"], help="dataset type (default: XRayDataset)")
     parser.add_argument(
         "--augmentation", type=str, default=config["augmentation"], help="dataset augmentation type (default: BaseAugmentation)"
@@ -64,6 +65,9 @@ def parse_args():
     parser.add_argument("--root_dir", type=str, default=os.environ.get("SM_CHANNEL_TRAIN", "/opt/ml/data"))
     parser.add_argument("--model_dir", type=str, default=os.environ.get("SM_MODEL_DIR", "./outputs"))
     args = parser.parse_args()
+
+    if args.is_debug:
+        args.epochs = 2
     print(args)
 
     return args
@@ -114,8 +118,8 @@ def main(args):
 
     # -- dataset
     dataset_module = getattr(import_module("datasets.base_dataset"), args.dataset)  # default: XRayDataset
-    train_dataset = dataset_module(IMAGE_ROOT, LABEL_ROOT, is_train=True)
-    valid_dataset = dataset_module(IMAGE_ROOT, LABEL_ROOT, is_train=False)
+    train_dataset = dataset_module(IMAGE_ROOT, LABEL_ROOT, is_train=True, is_debug = args.is_debug)
+    valid_dataset = dataset_module(IMAGE_ROOT, LABEL_ROOT, is_train=False, is_debug = args.is_debug)
 
     # -- augmentation
     transform_module = getattr(import_module("datasets.augmentation"), args.augmentation)  # default: BaseAugmentation

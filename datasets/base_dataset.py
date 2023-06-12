@@ -41,7 +41,7 @@ def collect_img_json(IMAGE_ROOT, LABEL_ROOT):
     return pngs, jsons
 
 
-def split_filename(is_train, pngs, jsons):
+def split_filename(is_train, pngs, jsons, is_debug):
     # split train-valid
     # 한 폴더 안에 한 인물의 양손에 대한 `.png` 파일이 존재하기 때문에
     # 폴더 이름을 그룹으로 해서 GroupKFold를 수행합니다.
@@ -53,8 +53,10 @@ def split_filename(is_train, pngs, jsons):
 
     # 전체 데이터의 20%를 validation data로 쓰기 위해 `n_splits`를
     # 5으로 설정하여 GroupKFold를 수행합니다.
-    gkf = GroupKFold(n_splits=5)
-
+    if is_debug:
+        gkf = GroupKFold(n_splits=25)
+    else:
+        gkf = GroupKFold(n_splits=5)
     train_filenames = []
     train_labelnames = []
     valid_filenames = []
@@ -65,7 +67,7 @@ def split_filename(is_train, pngs, jsons):
             valid_filenames += list(pngs[y])
             valid_labelnames += list(jsons[y])
 
-        else:
+        elif i < 5:
             train_filenames += list(pngs[y])
             train_labelnames += list(jsons[y])
 
@@ -73,14 +75,14 @@ def split_filename(is_train, pngs, jsons):
 
 
 class XRayDataset(Dataset):
-    def __init__(self, IMAGE_ROOT, LABEL_ROOT, transforms=BaseAugmentation, is_train=False):
+    def __init__(self, IMAGE_ROOT, LABEL_ROOT, transforms=BaseAugmentation, is_train=False, is_debug=False):
         self.is_train = is_train
         self.transforms = transforms
         self.IMAGE_ROOT = IMAGE_ROOT
         self.LABEL_ROOT = LABEL_ROOT
 
         pngs, jsons = collect_img_json(IMAGE_ROOT, LABEL_ROOT)
-        self.filenames, self.labelnames = split_filename(is_train, pngs, jsons)
+        self.filenames, self.labelnames = split_filename(is_train, pngs, jsons, is_debug)
 
     def set_transform(self, transforms):
         self.transforms = transforms
