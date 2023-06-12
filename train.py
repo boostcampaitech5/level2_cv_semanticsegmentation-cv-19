@@ -33,6 +33,10 @@ def parse_args():
 
     # Data and model checkpoints directories
     parser.add_argument("--config", type=str, default="./configs/queue/base_config.json", help="config file address")
+    # Container environment
+    parser.add_argument("--root_dir", type=str, default=os.environ.get("SM_CHANNEL_TRAIN", "/opt/ml/data"))
+    parser.add_argument("--model_dir", type=str, default=os.environ.get("SM_MODEL_DIR", "./outputs"))
+    parser.add_argument("--device", default="cuda" if cuda.is_available() else "cpu")
     args = parser.parse_args()
     with open(args.config, "r") as f:
         config = json.load(f)
@@ -58,12 +62,8 @@ def parse_args():
     parser.add_argument("--optimizer", type=str, default=config["optimizer"], help="optimizer type (default: Adam)")
     parser.add_argument("--lr_scheduler", type=str, default=config["lr_scheduler"], help="lr_scheduler type (default: StepLR)")
 
-    parser.add_argument("--device", default="cuda" if cuda.is_available() else "cpu")
     parser.add_argument("--num_workers", type=int, default=config["num_workers"])
 
-    # Container environment
-    parser.add_argument("--root_dir", type=str, default=os.environ.get("SM_CHANNEL_TRAIN", "/opt/ml/data"))
-    parser.add_argument("--model_dir", type=str, default=os.environ.get("SM_MODEL_DIR", "./outputs"))
     args = parser.parse_args()
 
     if args.is_debug:
