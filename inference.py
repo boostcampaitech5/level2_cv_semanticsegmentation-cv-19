@@ -58,7 +58,7 @@ def test(model, data_loader, thr=0.5):
     filename_and_class = []
     with torch.no_grad():
         for _, (images, image_names) in enumerate(data_loader):
-            images = images.cuda()
+            images = images.to(device)
             outputs = model(images)
 
             # restore original size
@@ -108,7 +108,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if use_cuda else "cpu")
     parser.add_argument("--exp", type=str, default="Baseline", help="exp directory address")
     parser.add_argument("--device", type=str, default=device, help="device (cuda or cpu)")
-    parser.add_argument("--weights", type=str, default="best.pth", help="model weights file (default: best.pth)")
+    parser.add_argument("--weights", type=str, default="best_epoch.pth", help="model weights file (default: best.pth)")
     parser.add_argument("--batch_size", type=int, default=8, help="input batch size for validing (default: 1000)")
     parser.add_argument(
         "--resize", nargs="+", type=int, default=[512, 512], help="resize size for image when you trained (default: [512, 512])"

@@ -66,7 +66,7 @@ if which_img == "train":
         # print(os.path.join(IMAGE_ROOT, png), os.path.join(root_dir, "_".join(png.split("/"))))
 
         os.system(f"cp  {os.path.join(IMAGE_ROOT, png)} {os.path.join(img_root, '_'.join(png.split('/')))}")
-        os.system(f"cp {os.path.join(LABEL_ROOT, json)} {os.path.join(label_root, '_'.join(png.split('/')))}")
+        os.system(f"cp {os.path.join(LABEL_ROOT, json)} {os.path.join(label_root, '_'.join(json.split('/')))}")
 else:
     pngs = collect_img_json(IMAGE_ROOT, LABEL_ROOT, is_train=False)
 
