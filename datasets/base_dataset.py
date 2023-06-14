@@ -8,7 +8,7 @@ from sklearn.model_selection import GroupKFold
 from torch.utils.data import Dataset
 
 import constants
-from datasets.augmentation import BaseAugmentation
+from datasets.augmentation import BaseAugmentation, TestAugmentation
 
 
 # root로부터 png, json을 읽고 순서를 matching해서 반환
@@ -151,7 +151,7 @@ class XRayDataset(Dataset):
         return image
 
 class XRayInferenceDataset(Dataset):
-    def __init__(self, img_path, transforms=None):
+    def __init__(self, img_path, transforms=TestAugmentation):
         pngs = {
             os.path.relpath(os.path.join(root, fname), start=img_path)
             for root, _dirs, files in os.walk(img_path)
@@ -164,9 +164,15 @@ class XRayInferenceDataset(Dataset):
         self.filenames = _filenames
         self.transforms = transforms
 
+    def set_transform(self, transforms):
+        self.transforms = transforms
+
+    def get_transform(self):
+        return self.transforms
+    
     def __len__(self):
         return len(self.filenames)
-
+    
     def __getitem__(self, item):
         image_name = self.filenames[item]
         image_path = os.path.join(self.img_path, image_name)
