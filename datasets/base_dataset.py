@@ -169,6 +169,7 @@ class XRayInferenceDataset(Dataset):
 
     def get_transform(self):
         return self.transforms
+    
     def __len__(self):
         return len(self.filenames)
     

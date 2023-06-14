@@ -84,8 +84,6 @@ def inference(data_dir, args):
     if args.augmentation != None:
         transform = getattr(import_module("datasets.augmentation"), args.augmentation) 
         dataset.set_transform(transform)
-        print("args.augmentation은 None!")
-    print(dataset.get_transform())
     loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=args.batch_size, shuffle=False, num_workers=2, drop_last=False)
     print("Calculating inference results..")
     rles, filename_and_class = test(model, loader)
