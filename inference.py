@@ -10,7 +10,6 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from datasets.base_dataset import XRayInferenceDataset
-from datasets.augmentation import TestAugmentation
 
 def load_model(saved_model, device):
     model_module_name = "model." + model_name.lower() + "_custom"
