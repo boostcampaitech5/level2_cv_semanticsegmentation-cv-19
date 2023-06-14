@@ -80,8 +80,12 @@ def inference(data_dir, args):
     model = load_model(exp_path, device)
 
     img_root = os.path.join(data_dir, "test/DCM")
-    transform = TestAugmentation
-    dataset = XRayInferenceDataset(img_path=img_root, transforms=transform)
+    dataset = XRayInferenceDataset(img_path=img_root)
+    if args.augmentation != None:
+        transform = getattr(import_module("datasets.augmentation"), args.augmentation) 
+        dataset.set_transform(transform)
+        print("args.augmentation은 None!")
+    print(dataset.get_transform())
     loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=args.batch_size, shuffle=False, num_workers=2, drop_last=False)
     print("Calculating inference results..")
     rles, filename_and_class = test(model, loader)
@@ -110,7 +114,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default=device, help="device (cuda or cpu)")
     parser.add_argument("--weights", type=str, default="best_epoch.pth", help="model weights file (default: best.pth)")
     parser.add_argument("--batch_size", type=int, default=8, help="input batch size for validing (default: 1000)")
-
+    parser.add_argument("--augmentation", type=str, default=None, help="augmentation from datasets.augmentation")
     # Container environment
     parser.add_argument("--data_dir", type=str, default=os.environ.get("SM_CHANNEL_EVAL", "/opt/ml/data"))
 
