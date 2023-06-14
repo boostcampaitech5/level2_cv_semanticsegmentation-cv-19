@@ -10,7 +10,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from datasets.base_dataset import XRayInferenceDataset
-
+from datasets.augmentation import TestAugmentation
 
 def load_model(saved_model, device):
     model_module_name = "model." + model_name.lower() + "_custom"
@@ -80,7 +80,7 @@ def inference(data_dir, args):
     model = load_model(exp_path, device)
 
     img_root = os.path.join(data_dir, "test/DCM")
-    transform = A.Resize(*args.resize)
+    transform = TestAugmentation
     dataset = XRayInferenceDataset(img_path=img_root, transforms=transform)
     loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=args.batch_size, shuffle=False, num_workers=2, drop_last=False)
     print("Calculating inference results..")
@@ -110,9 +110,6 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default=device, help="device (cuda or cpu)")
     parser.add_argument("--weights", type=str, default="best_epoch.pth", help="model weights file (default: best.pth)")
     parser.add_argument("--batch_size", type=int, default=8, help="input batch size for validing (default: 1000)")
-    parser.add_argument(
-        "--resize", nargs="+", type=int, default=[512, 512], help="resize size for image when you trained (default: [512, 512])"
-    )
 
     # Container environment
     parser.add_argument("--data_dir", type=str, default=os.environ.get("SM_CHANNEL_EVAL", "/opt/ml/data"))
