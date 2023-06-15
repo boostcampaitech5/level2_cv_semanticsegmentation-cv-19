@@ -64,13 +64,13 @@ class Trainer(BaseTrainer):
 
             self.optimizer.zero_grad()
             output = self.model(data)
-            
+
             # size가 달라진 경우 input_size와 같게 복원
             output_h, output_w = output.size(-2), output.size(-1)
             mask_h, mask_w = data.size(-2), data.size(-1)
             if output_h != mask_h or output_w != mask_w:
                 output = F.interpolate(output, size=(mask_h, mask_w), mode="bilinear")
-            
+
             for loss_fn in self.criterion:  # [bce_with_logit, ...]
                 loss = loss_fn(output, target)
                 self.train_metrics.update(loss_fn.__class__.__name__, loss.item())  # metric_fn마다 값 update
@@ -123,10 +123,10 @@ class Trainer(BaseTrainer):
         print("Validation Start!")
         self.model.eval()
         self.valid_metrics.reset()
-        total_val_loss = 0
         with torch.no_grad():
             for batch_idx, (data, target) in enumerate(self.val_loader):
                 data, target = data.to(self.device), target.to(self.device)
+                total_val_loss = 0
 
                 output = self.model(data)
 

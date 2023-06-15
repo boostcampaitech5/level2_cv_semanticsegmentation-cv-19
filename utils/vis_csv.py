@@ -72,11 +72,13 @@ PALETTE = [
 
 
 def decode_rle_to_mask(rle, height, width):
+    img = np.zeros(height * width, dtype=np.uint8)
+    if type(rle) == float:
+        return img.reshape(height, width)
     s = rle.split()
     starts, lengths = [np.asarray(x, dtype=int) for x in (s[0:][::2], s[1:][::2])]
     starts -= 1
     ends = starts + lengths
-    img = np.zeros(height * width, dtype=np.uint8)
 
     for lo, hi in zip(starts, ends):
         img[lo:hi] = 1

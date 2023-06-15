@@ -114,33 +114,36 @@ def label2rgb(label):
 
 def error2rgb(label, pred):
     image_size = label.shape[1:] + (3,)
-    image = np.zeros(image_size)
+    error_map = np.zeros(image_size)
 
     for fp in label < pred:
-        image[fp] = np.maximum(image[fp], np.array([255, 0, 0]))
+        error_map[fp] = np.maximum(error_map[fp], np.array([255, 0, 0]))
 
     for fn in label > pred:
-        image[fn] = np.maximum(image[fn], np.array([0, 0, 255]))
+        error_map[fn] = np.maximum(error_map[fn], np.array([0, 0, 255]))
 
-    rgb_sum = np.sum(image, axis=2)
+    rgb_sum = np.sum(error_map, axis=2)
     pred_sum = np.sum(pred, axis=0)
 
-    error_map = image.copy()
     error_map[rgb_sum == 0] = (255, 255, 255)
 
-    tp = np.logical_and(rgb_sum == 0, pred_sum > 0)
-    image[tp] = (0, 127, 0)
+    image_tp = np.zeros(image_size)
+    tp_idx = np.logical_and(rgb_sum == 0, pred_sum > 0)
+    image_tp[tp_idx] = (0, 127, 0)
 
-    return image.astype(np.uint8), error_map.astype(np.uint8)
+    return image_tp.astype(np.uint8), error_map.astype(np.uint8)
 
 
 def draw_and_save(image, label, pred, save_path):
-    acc_map, error_map = error2rgb(label, pred)
+    tp_map, error_map = error2rgb(label, pred)
     label = label2rgb(label)
     pred = label2rgb(pred)
     ground_truth = np.clip(image + label / 3, 0, 255).astype(np.uint8)
     pred = np.clip(image + pred / 3, 0, 255).astype(np.uint8)
-    acc_map = np.clip(image + acc_map / 3, 0, 255).astype(np.uint8)
+
+    confusion_map = np.clip(image + tp_map / 3, 0, 255).astype(np.uint8)
+    error_mask = error_map != [255, 255, 255]
+    confusion_map[error_mask] = error_map[error_mask]
 
     _, ax = plt.subplots(2, 2, figsize=(12, 12))
     ax = ax.flatten()
@@ -157,7 +160,7 @@ def draw_and_save(image, label, pred, save_path):
     ax[2].imshow(error_map)
 
     ax[3].set_title("Error Map (Projection)", fontsize=20)
-    ax[3].imshow(acc_map)
+    ax[3].imshow(confusion_map)
     plt.savefig(save_path)
 
 
@@ -178,10 +181,13 @@ def inference(cfg):
     device = torch.device("cuda")
 
     # -- model load
-    model_module = getattr(import_module("model.my_model"), cfg.model_name)
+    print("Model Load...    ", end=" ")
+    model_module_name = "model." + cfg.model_name.lower() + "_custom"
+    model_module = getattr(import_module(model_module_name), cfg.model_name)
     model = model_module().to(device)
     model.load_state_dict(torch.load(cfg.ckpt_path, map_location=device))
     model.eval()
+    print("Done!")
 
     # -- inference
     with torch.no_grad():

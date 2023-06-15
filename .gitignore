@@ -115,4 +115,5 @@ __MACOSX/
 wandb/
 outputs/
 configs/
+code_testing/
 log*.txt
