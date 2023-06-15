@@ -139,16 +139,6 @@ class XRayDataset(Dataset):
 
         return image, label
 
-    # utility function, this does not care overlap
-    @staticmethod
-    def label2rgb(label):
-        image_size = label.shape[1:] + (3,)
-        image = np.zeros(image_size, dtype=np.uint8)
-
-        for i, class_label in enumerate(label):
-            image[class_label == 1] = constants.PALETTE[i]
-
-        return image
 
 class XRayInferenceDataset(Dataset):
     def __init__(self, img_path, transforms=TestAugmentation):
@@ -169,10 +159,10 @@ class XRayInferenceDataset(Dataset):
 
     def get_transform(self):
         return self.transforms
-    
+
     def __len__(self):
         return len(self.filenames)
-    
+
     def __getitem__(self, item):
         image_name = self.filenames[item]
         image_path = os.path.join(self.img_path, image_name)
