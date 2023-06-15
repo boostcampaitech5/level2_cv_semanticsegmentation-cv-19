@@ -5,19 +5,28 @@
     "early_stop": 10,
     "save_interval": 1,
     "log_interval": 20,
-    "is_wandb": false,
+    "is_wandb": true,
+    "is_debug": false,
     "dataset": "XRayDataset",
-    "augmentation": "BaseAugmentation",
-    "batch_size": 8,
+    "augmentation": "CustomAugmentation",
+    "batch_size": 4,
     "model": "UNet",
     "criterion": [
-        "bce_with_logit"
+        "cross_entropy",
+        "focal",
+        "bce_with_logit",
+        "dice",
+        "iou",
+        "combo_loss",
+        "tversky",
+        "focal_tversky",
+        "lovaz"
     ],
     "optimizer": {
         "type": "AdamW",
         "args": {
-            "lr": 1e-3,
-            "weight_decay": 1e-4
+            "lr": 5e-4,
+            "weight_decay": 5e-5
         }
     },
     "lr_scheduler": {
@@ -25,7 +34,7 @@
         "args": {
             "mode": "min",
             "factor": 0.1,
-            "patience": 5,
+            "patience": 3,
             "verbose": true
         }
     },

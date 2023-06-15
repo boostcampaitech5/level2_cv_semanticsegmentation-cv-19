@@ -47,7 +47,7 @@ class Trainer(BaseTrainer):
         # metric_fn들이 각 df의 index로 들어감
         self.train_metrics = MetricTracker("Loss", *[c.__class__.__name__ for c in self.criterion], *["DiceCoef"])
         self.valid_metrics = MetricTracker("Loss", *["DiceCoef"])
-        # print(self.train_metrics._data.index) # Index(['Loss', 'BCEWithLogitsLoss', 'DiceCoef'], dtype='object')
+        # print(self.train_metrics._data.index)  # Index(['Loss', 'FocalLoss', 'DiceLoss', 'IoULoss', 'CombineLoss', 'DiceCoef'], dtype='object')
 
     def _train_epoch(self, epoch):
         """
@@ -73,6 +73,7 @@ class Trainer(BaseTrainer):
 
             for loss_fn in self.criterion:  # [bce_with_logit, ...]
                 loss = loss_fn(output, target)
+                # print(f"{loss_fn} : ", loss)
                 self.train_metrics.update(loss_fn.__class__.__name__, loss.item())  # metric_fn마다 값 update
                 total_loss += loss
 
