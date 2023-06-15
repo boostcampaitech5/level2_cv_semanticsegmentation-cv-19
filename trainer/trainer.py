@@ -45,7 +45,7 @@ class Trainer(BaseTrainer):
         self.log_step = args.log_interval
 
         # metric_fn들이 각 df의 index로 들어감
-        self.train_metrics = MetricTracker("Loss", *[c.__class__.__name__ for c in self.criterion], *["DiceCoef"])
+        self.train_metrics = MetricTracker("Loss", *[c.__class__.__name__ for c in self.criterion])  # DiceCoef
         self.valid_metrics = MetricTracker("Loss", *["DiceCoef"])
         # print(self.train_metrics._data.index)  # Index(['Loss', 'FocalLoss', 'DiceLoss', 'IoULoss', 'CombineLoss', 'DiceCoef'], dtype='object')
 
@@ -83,13 +83,15 @@ class Trainer(BaseTrainer):
             # update loss value
             self.train_metrics.update("Loss", total_loss.item())
             # for met in self.metric_ftns:
-            #     self.train_metrics.update(met.__class__.__name__, met(output, target).mean(0))  # DiceCoef()가 [bs, num_class] 차원으로 return
+            #     dice = met(output, target).mean(0)
+            #     self.train_metrics.update(met.__class__.__name__, dice)
+            #     print(dice)
 
             if batch_idx % self.log_step == 0:
                 print(f"Train Epoch: {epoch}/{self.args.epochs} {self._progress(batch_idx)} Loss: {total_loss.item():.6f}")
                 log_dict = self.train_metrics.result()
                 if self.args.is_wandb:
-                    wandb.log({"Iter_train_Loss": log_dict["Loss"]})
+                    wandb.log({"Iter_train_" + k: v for k, v in log_dict.items()})  # logging per log_step (default=20)
             if batch_idx == self.len_epoch:
                 break
 
@@ -145,14 +147,18 @@ class Trainer(BaseTrainer):
                 output = (output > thr).detach().cpu()
                 target = target.detach().cpu()
 
-                for met in self.metric_ftns:
-                    self.valid_metrics.update(met.__class__.__name__, met(output, target).mean(0))  # [bs, num_classes]
-
                 # update loss value
                 self.valid_metrics.update("Loss", total_val_loss.item())
+                for met in self.metric_ftns:
+                    dice = met(output, target).mean(0)
+                    self.valid_metrics.update(met.__class__.__name__, dice)
+                    # print(dice)
 
         val_log_dict = self.valid_metrics.result()
-        val_log_dict["DiceCoef"] = val_log_dict["DiceCoef"].mean(0).item()
+        dice_coef = val_log_dict["DiceCoef"]
+        val_log_dict["DiceCoef"] = val_log_dict["DiceCoef"].mean().item()
+        for i in range(1, 30):
+            val_log_dict[f"DiceCoef_class{i}"] = dice_coef[i - 1].item()
 
         return val_log_dict
 
