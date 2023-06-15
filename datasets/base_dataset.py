@@ -75,12 +75,12 @@ def split_filename(is_train, pngs, jsons, is_debug):
 
 
 class XRayDataset(Dataset):
-    def __init__(self, IMAGE_ROOT, LABEL_ROOT, transforms=BaseAugmentation, is_train=False, is_debug=False):
+    def __init__(self, IMAGE_ROOT, LABEL_ROOT, transforms=BaseAugmentation, is_train=False, is_debug=False, preprocessing=None):
         self.is_train = is_train
         self.transforms = transforms
         self.IMAGE_ROOT = IMAGE_ROOT
         self.LABEL_ROOT = LABEL_ROOT
-
+        self.preprocessing = preprocessing
         pngs, jsons = collect_img_json(IMAGE_ROOT, LABEL_ROOT)
         self.filenames, self.labelnames = split_filename(is_train, pngs, jsons, is_debug)
 
@@ -129,7 +129,11 @@ class XRayDataset(Dataset):
 
             image = result["image"]
             label = result["mask"] if self.is_train else label
-
+        '''
+        if self.preprocessing:
+            sample = self.preprocessing(image=image, mask=label)
+            image, label = sample['image'], sample['mask']
+        '''
         # to tenser will be done later
         image = image.transpose(2, 0, 1)  # make channel first
         label = label.transpose(2, 0, 1)

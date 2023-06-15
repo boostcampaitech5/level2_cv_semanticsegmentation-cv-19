@@ -95,7 +95,7 @@ def inference(data_dir, args):
             "rle": rles,
         }
     )
-    save_path = os.path.join(exp_path, "output.csv")
+    save_path = os.path.join(exp_path, f"{args.exp}.csv")
     df.to_csv(save_path, index=False)
     print(f"Inference Done! Inference result saved at {save_path}")
 
