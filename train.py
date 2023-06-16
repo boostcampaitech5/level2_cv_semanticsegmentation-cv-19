@@ -15,7 +15,9 @@ from torch import cuda
 from torch.utils.data import DataLoader
 from trainer.trainer import Trainer
 from utils.util import ensure_dir
-
+import segmentation_models_pytorch as smp
+from segmentation_models_pytorch.encoders import get_preprocessing_fn
+import albumentations as albu
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -34,8 +36,7 @@ def parse_args():
     # Data and model checkpoints directories
     parser.add_argument("--config", type=str, default="./configs/queue/base_config.json", help="config file address")
     # Container environment
-    parser.add_argument("--root_dir", type=str, default=os.environ.get("SM_CHANNEL_TRAIN", "/opt/ml/data"))
-    parser.add_argument("--model_dir", type=str, default=os.environ.get("SM_MODEL_DIR", "./outputs"))
+    parser.add_argument("--model_dir", type=str, default=os.environ.get("SM_MODEL_DIR", "./outputs"), help="model save at {SM_MODEL_DIR}")
     parser.add_argument("--device", default="cuda" if cuda.is_available() else "cpu")
     args = parser.parse_args()
     with open(args.config, "r") as f:
@@ -43,6 +44,7 @@ def parse_args():
 
     # Conventional args
     parser.add_argument("--name", default=config["name"], help="model save at {SM_MODEL_DIR}/{name}")
+    parser.add_argument("--root_dir", type=str, default=config["root_dir"], help="input data path (default: /opt/ml/data)")
     parser.add_argument("--seed", type=int, default=config["seed"], help="random seed (default: 42)")
     parser.add_argument("--epochs", type=int, default=config["epochs"], help="number of epochs to train (default: 1)")
     parser.add_argument("--early_stop", type=int, default=config["early_stop"], help="Early stop training when 10 epochs no improvement")
@@ -50,6 +52,7 @@ def parse_args():
     parser.add_argument("--log_interval", type=int, default=config["log_interval"], help="Wandb logging interva(step)")
     parser.add_argument("--is_wandb", type=str2bool, default=config["is_wandb"], help="determine whether log at Wandb or not")
     parser.add_argument("--is_debug", type=str2bool, default=config["is_debug"], help="determine whether debugging mode or not")
+    parser.add_argument("--smp", type=str, default=config["smp"], help="use segmentation_models_pytorch")
     parser.add_argument("--dataset", type=str, default=config["dataset"], help="dataset type (default: XRayDataset)")
     parser.add_argument(
         "--augmentation", type=str, default=config["augmentation"], help="dataset augmentation type (default: BaseAugmentation)"
@@ -65,7 +68,7 @@ def parse_args():
     parser.add_argument("--num_workers", type=int, default=config["num_workers"])
 
     args = parser.parse_args()
-
+    args.smp['use'] = str2bool(args.smp['use'])
     if args.is_debug:
         args.epochs = 2
     print(args)
@@ -81,6 +84,7 @@ def seed_everything(seed):
     torch.backends.cudnn.benchmark = False
     np.random.seed(seed)
     random.seed(seed)
+    
 
 
 def increment_path(path, exist_ok=False):
@@ -100,6 +104,25 @@ def increment_path(path, exist_ok=False):
         n = max(i) + 1 if i else 2
         return f"{path}{n}"
 
+def to_tensor(x, **kwargs):
+    return x.transpose(2, 0, 1).astype('float32')
+
+def get_preprocessing(preprocessing_fn):
+    """Construct preprocessing transform
+    
+    Args:
+        preprocessing_fn (callbale): data normalization function 
+            (can be specific for each pretrained neural network)
+    Return:
+        transform: albumentations.Compose
+    
+    """
+    
+    _transform = [
+        albu.Lambda(image=preprocessing_fn),
+        albu.Lambda(image=to_tensor, mask=to_tensor),
+    ]
+    return albu.Compose(_transform)
 
 def main(args):
     if args.is_wandb:
@@ -116,10 +139,22 @@ def main(args):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
 
+    # -- model
+    preprocess_input = None
+    if args.smp['use']:
+        model_module = getattr(smp, args.model)
+        model = model_module(**dict(args.smp['args'])).to(device)
+        preprocess_input = get_preprocessing_fn(args.smp['args']['encoder_name'], args.smp['args']['encoder_weights'])
+    else:
+        model_file_name = args.model.lower() + "_custom"  # custom
+        model_name = "model." + model_file_name
+        model_module = getattr(import_module(model_name), args.model)  # default: UNet
+        model = model_module().to(device)
+        
     # -- dataset
     dataset_module = getattr(import_module("datasets.base_dataset"), args.dataset)  # default: XRayDataset
-    train_dataset = dataset_module(IMAGE_ROOT, LABEL_ROOT, is_train=True, is_debug = args.is_debug)
-    valid_dataset = dataset_module(IMAGE_ROOT, LABEL_ROOT, is_train=False, is_debug = args.is_debug)
+    train_dataset = dataset_module(IMAGE_ROOT, LABEL_ROOT, is_train=True, is_debug = args.is_debug, preprocessing = get_preprocessing(preprocess_input))
+    valid_dataset = dataset_module(IMAGE_ROOT, LABEL_ROOT, is_train=False, is_debug = args.is_debug, preprocessing = get_preprocessing(preprocess_input))
 
     # -- augmentation
     transform_module = getattr(import_module("datasets.augmentation"), args.augmentation)  # default: BaseAugmentation
@@ -137,12 +172,6 @@ def main(args):
         drop_last=True,
     )
     valid_loader = DataLoader(dataset=valid_dataset, batch_size=1, shuffle=False, num_workers=2, drop_last=False)
-
-    # -- model
-    model_file_name = args.model.lower() + "_custom"  # custom
-    model_name = "model." + model_file_name
-    model_module = getattr(import_module(model_name), args.model)  # default: UNet
-    model = model_module().to(device)
 
     # -- loss & metric
     criterion = []

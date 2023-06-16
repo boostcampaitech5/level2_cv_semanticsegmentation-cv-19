@@ -10,17 +10,33 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from datasets.base_dataset import XRayInferenceDataset
+import segmentation_models_pytorch as smp
+from segmentation_models_pytorch.encoders import get_preprocessing_fn
+import albumentations as albu
 
 def load_model(saved_model, device):
-    model_module_name = "model." + model_name.lower() + "_custom"
-    model_module = getattr(import_module(model_module_name), model_name)
-    model = model_module().to(device)
+    if smp_model["use"]:
+        model_module = getattr(smp, model_name)
+        model = model_module(**dict(smp_model['args'])).to(device)
+    else:
+        model_module_name = "model." + model_name.lower() + "_custom"
+        model_module = getattr(import_module(model_module_name), model_name)
+        model = model_module().to(device)
 
     model_path = os.path.join(saved_model, args.weights)
     model.load_state_dict(torch.load(model_path, map_location=device))
 
     return model
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    elif v.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    else:
+        raise argparse.ArgumentTypeError("Boolean value expected.")
 
 def encode_mask_to_rle(mask):
     """
@@ -95,7 +111,7 @@ def inference(data_dir, args):
             "rle": rles,
         }
     )
-    save_path = os.path.join(exp_path, "output.csv")
+    save_path = os.path.join(exp_path, f"{args.exp}.csv")
     df.to_csv(save_path, index=False)
     print(f"Inference Done! Inference result saved at {save_path}")
 
@@ -123,6 +139,8 @@ if __name__ == "__main__":
         with open(json_path, "r") as f:
             config = json.load(f)
     model_name = config["model"]
+    smp_model = config['smp']
+    smp_model['use'] = str2bool(smp_model['use'])
     data_dir = args.data_dir
     device = args.device
     inference(data_dir, args)
