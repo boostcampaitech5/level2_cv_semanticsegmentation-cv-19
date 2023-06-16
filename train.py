@@ -84,6 +84,7 @@ def seed_everything(seed):
     torch.backends.cudnn.benchmark = False
     np.random.seed(seed)
     random.seed(seed)
+    
 
 
 def increment_path(path, exist_ok=False):
