@@ -55,7 +55,7 @@ class BaseTrainer:
 
             # evaluate model performance according to configured metric, save best checkpoint as model_best
             if log["val_DiceCoef"] > best_val_dice:
-                print(f"New best model for val DiceCoef : {log['val_DiceCoef']:.4f}%! saving the best model..")
+                print(f"New best model for val DiceCoef : {log['val_DiceCoef']:.4f}! saving the best model..")
                 torch.save(self.model.state_dict(), f"{self.save_dir}/best_epoch.pth")
                 best_val_dice = log["val_DiceCoef"]
                 best_val_loss = log["val_Loss"]
