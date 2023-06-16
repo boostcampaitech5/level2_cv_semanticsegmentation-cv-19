@@ -1,5 +1,6 @@
 {
     "name": "Baseline",
+    "root_dir": "/opt/ml/data",
     "seed": 21,
     "epochs": 250,
     "early_stop": 10,
@@ -7,12 +8,21 @@
     "log_interval": 20,
     "is_wandb": true,
     "is_debug": false,
+    "smp": {
+        "use": false,
+        "args": {
+            "encoder_name": "efficientnet-b7",
+            "encoder_weights": "imagenet",
+            "in_channels": 3,
+            "classes": 29
+        }
+    },
     "dataset": "XRayDataset",
     "augmentation": "CustomAugmentation",
-    "batch_size": 4,
+    "batch_size": 8,
+    "iters_to_accumulate": 4,
     "model": "UNet",
     "criterion": [
-        "cross_entropy",
         "focal",
         "bce_with_logit",
         "dice",
@@ -25,8 +35,8 @@
     "optimizer": {
         "type": "AdamW",
         "args": {
-            "lr": 5e-4,
-            "weight_decay": 5e-5
+            "lr": 1e-4,
+            "weight_decay": 1e-5
         }
     },
     "lr_scheduler": {
@@ -38,5 +48,5 @@
             "verbose": true
         }
     },
-    "num_workers": 8
+    "num_workers": 4
 }

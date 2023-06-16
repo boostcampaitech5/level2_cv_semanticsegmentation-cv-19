@@ -44,6 +44,7 @@ class Trainer(BaseTrainer):
         self.do_validation = self.val_loader is not None
         self.lr_scheduler = lr_scheduler
         self.log_step = args.log_interval
+        self.iters_to_accumulate = args.iters_to_accumulate
 
         # metric_fn들이 각 df의 index로 들어감
         self.train_metrics = MetricTracker("Loss", *[c.__class__.__name__ for c in self.criterion])  # DiceCoef
@@ -61,11 +62,11 @@ class Trainer(BaseTrainer):
         start = time.time()
         self.model.train()
         self.train_metrics.reset()
+
+        self.optimizer.zero_grad()
         for batch_idx, (data, target) in enumerate(self.train_loader):
             data, target = data.to(self.device), target.to(self.device)
             total_loss = 0
-
-            self.optimizer.zero_grad()
 
             with autocast():
                 output = self.model(data)
@@ -80,11 +81,14 @@ class Trainer(BaseTrainer):
                     loss = loss_fn(output, target)
                     # print(f"{loss_fn} : ", loss)
                     self.train_metrics.update(loss_fn.__class__.__name__, loss.item())  # metric_fn마다 값 update
-                    total_loss += loss
+                    total_loss += loss / self.iters_to_accumulate
 
             self.scaler.scale(total_loss).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+
+            if (batch_idx + 1) % self.iters_to_accumulate == 0:
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad()
 
             # update loss value
             self.train_metrics.update("Loss", total_loss.item())
