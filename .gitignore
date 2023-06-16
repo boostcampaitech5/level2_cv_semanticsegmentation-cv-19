@@ -117,3 +117,5 @@ outputs/
 configs/
 code_testing/
 log*.txt
+streamlit/
+deprecated/
