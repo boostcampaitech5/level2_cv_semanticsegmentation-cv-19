@@ -36,8 +36,7 @@ def parse_args():
     # Data and model checkpoints directories
     parser.add_argument("--config", type=str, default="./configs/queue/base_config.json", help="config file address")
     # Container environment
-    parser.add_argument("--root_dir", type=str, default=os.environ.get("SM_CHANNEL_TRAIN", "/opt/ml/data"))
-    parser.add_argument("--model_dir", type=str, default=os.environ.get("SM_MODEL_DIR", "./outputs"))
+    parser.add_argument("--model_dir", type=str, default=os.environ.get("SM_MODEL_DIR", "./outputs"), help="model save at {SM_MODEL_DIR}")
     parser.add_argument("--device", default="cuda" if cuda.is_available() else "cpu")
     args = parser.parse_args()
     with open(args.config, "r") as f:
@@ -45,6 +44,7 @@ def parse_args():
 
     # Conventional args
     parser.add_argument("--name", default=config["name"], help="model save at {SM_MODEL_DIR}/{name}")
+    parser.add_argument("--root_dir", type=str, default=config["root_dir"], help="input data path (default: /opt/ml/data)")
     parser.add_argument("--seed", type=int, default=config["seed"], help="random seed (default: 42)")
     parser.add_argument("--epochs", type=int, default=config["epochs"], help="number of epochs to train (default: 1)")
     parser.add_argument("--early_stop", type=int, default=config["early_stop"], help="Early stop training when 10 epochs no improvement")
