@@ -42,7 +42,7 @@ class BaseAugmentation(object):
         else:
             return A.Compose(
                 [
-                    A.Resize(2048, 2048),  # A.Resize(self.img_size, self.img_size),
+                    A.Resize(self.img_size, self.img_size),
                     A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
                     transforms.ToTensorV2(p=1.0),
                 ]
@@ -69,7 +69,7 @@ class CustomAugmentation(BaseAugmentation):
         else:
             return A.Compose(
                 [
-                    A.Resize(2048, 2048),  # A.Resize(self.img_size, self.img_size),
+                    A.Resize(self.img_size, self.img_size),
                     A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
                     transforms.ToTensorV2(p=1.0),
                 ]
@@ -97,7 +97,7 @@ class CustomAugmentation1(BaseAugmentation):
         else:
             return A.Compose(
                 [
-                    A.Resize(2048, 2048),  # A.Resize(self.img_size, self.img_size),
+                    A.Resize(self.img_size, self.img_size),
                     A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
                     transforms.ToTensorV2(p=1.0),
                 ]
@@ -126,7 +126,7 @@ class CustomAugmentation2(BaseAugmentation):
         else:
             return A.Compose(
                 [
-                    A.Resize(2048, 2048),  # A.Resize(self.img_size, self.img_size),
+                    A.Resize(self.img_size, self.img_size),
                     A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
                     transforms.ToTensorV2(p=1.0),
                 ]
