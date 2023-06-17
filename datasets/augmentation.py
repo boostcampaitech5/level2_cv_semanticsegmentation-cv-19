@@ -134,6 +134,19 @@ class CustomAugmentation2(BaseAugmentation):
 
 
 class TestAugmentation(BaseAugmentation):
+    def __init__(self, img_size, is_train):
+        self.is_train = is_train
+        self.img_size = img_size
+        self.transforms = self.get_transforms()
+
+    def __call__(self, image):
+        inputs = {"image": image}
+        if self.transforms is not None:
+            result = self.transforms(**inputs)
+            image = result["image"]
+
+        return image
+
     def get_transforms(self):
         return A.Compose(
             [

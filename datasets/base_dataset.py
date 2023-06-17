@@ -160,8 +160,6 @@ class XRayInferenceDataset(Dataset):
         image = cv2.imread(image_path)
 
         if self.transforms is not None:
-            inputs = {"image": image}
-            result = self.transforms(**inputs)
-            image = result["image"]
+            image = self.transforms(image)
 
         return image, image_name
