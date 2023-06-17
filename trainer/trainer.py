@@ -2,6 +2,7 @@ import time
 
 import torch
 import torch.nn.functional as F
+from torch.cuda.amp import GradScaler, autocast
 
 import wandb
 from trainer.base_trainer import BaseTrainer
@@ -49,6 +50,8 @@ class Trainer(BaseTrainer):
         self.valid_metrics = MetricTracker("Loss", *["DiceCoef"])
         # print(self.train_metrics._data.index)  # Index(['Loss', 'FocalLoss', 'DiceLoss', 'IoULoss', 'CombineLoss', 'DiceCoef'], dtype='object')
 
+        self.scaler = GradScaler()
+
     def _train_epoch(self, epoch):
         """
         Training logic for an epoch
@@ -63,29 +66,28 @@ class Trainer(BaseTrainer):
             total_loss = 0
 
             self.optimizer.zero_grad()
-            output = self.model(data)
 
-            # size가 달라진 경우 input_size와 같게 복원
-            output_h, output_w = output.size(-2), output.size(-1)
-            mask_h, mask_w = data.size(-2), data.size(-1)
-            if output_h != mask_h or output_w != mask_w:
-                output = F.interpolate(output, size=(mask_h, mask_w), mode="bilinear")
+            with autocast():
+                output = self.model(data)
 
-            for loss_fn in self.criterion:  # [bce_with_logit, ...]
-                loss = loss_fn(output, target)
-                # print(f"{loss_fn} : ", loss)
-                self.train_metrics.update(loss_fn.__class__.__name__, loss.item())  # metric_fn마다 값 update
-                total_loss += loss
+                # size가 달라진 경우 input_size와 같게 복원
+                output_h, output_w = output.size(-2), output.size(-1)
+                mask_h, mask_w = data.size(-2), data.size(-1)
+                if output_h != mask_h or output_w != mask_w:
+                    output = F.interpolate(output, size=(mask_h, mask_w), mode="bilinear")
 
-            loss.backward()
-            self.optimizer.step()
+                for loss_fn in self.criterion:  # [bce_with_logit, ...]
+                    loss = loss_fn(output, target)
+                    # print(f"{loss_fn} : ", loss)
+                    self.train_metrics.update(loss_fn.__class__.__name__, loss.item())  # metric_fn마다 값 update
+                    total_loss += loss
+
+            self.scaler.scale(total_loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
 
             # update loss value
             self.train_metrics.update("Loss", total_loss.item())
-            # for met in self.metric_ftns:
-            #     dice = met(output, target).mean(0)
-            #     self.train_metrics.update(met.__class__.__name__, dice)
-            #     print(dice)
 
             if batch_idx % self.log_step == 0:
                 print(f"Train Epoch: {epoch}/{self.args.epochs} {self._progress(batch_idx)} Loss: {total_loss.item():.6f}")
