@@ -14,10 +14,9 @@ class FocalLoss(nn.Module):
         self.reduction = reduction
 
     def forward(self, inputs, targets):
-        inputs = F.sigmoid(inputs)
         inputs = inputs.view(-1)
         targets = targets.view(-1)
-        BCE = F.binary_cross_entropy(inputs, targets, reduction=self.reduction)
+        BCE = F.binary_cross_entropy_with_logits(inputs, targets, reduction=self.reduction)
         BCE_EXP = torch.exp(-BCE)
         loss = self.alpha * (1 - BCE_EXP) ** self.gamma * BCE
 
@@ -136,6 +135,113 @@ class ComboLoss(nn.Module):
         return loss
 
 
+class MultiTaskLoss(nn.Module):
+    """
+    Multi-task loss function.
+    Loss weights are learnt via homoscedastic uncertainty (Kendallet al.)
+    """
+
+    def __init__(self, losses_on, init_loss_weights=None, reduction="mean", eps=1e-6):
+        """
+        :param losses_on: List of outputs to apply losses on.
+        Subset of ['focal', 'bce_with_logit', 'dice', 'iou', 'tversky', 'focal_tversky', 'lovaz'].
+        :param init_loss_weights: Initial multi-task loss weights.
+        :param reduction: 'mean' or 'sum'
+        :param eps: small constant
+        """
+        super(MultiTaskLoss, self).__init__()
+
+        self.losses_on = losses_on
+        assert reduction in ["mean", "sum"], "Invalid reduction for loss."
+
+        init_focal_log_var = 0
+        init_bce_log_var = 0
+        init_dice_log_var = 0
+        init_iou_log_var = 0
+        init_tversky_log_var = 0
+        init_focal_tversky_log_var = 0
+        init_lovaz_log_var = 0
+
+        self.focal_log_var = nn.Parameter(torch.tensor(init_focal_log_var).float(), requires_grad=False)
+        self.bce_log_var = nn.Parameter(torch.tensor(init_bce_log_var).float(), requires_grad=False)
+        self.dice_log_var = nn.Parameter(torch.tensor(init_dice_log_var).float(), requires_grad=False)
+        self.iou_log_var = nn.Parameter(torch.tensor(init_iou_log_var).float(), requires_grad=False)
+        self.tversky_log_var = nn.Parameter(torch.tensor(init_tversky_log_var).float(), requires_grad=False)
+        self.focal_tversky_log_var = nn.Parameter(torch.tensor(init_focal_tversky_log_var).float(), requires_grad=False)
+        self.lovaz_log_var = nn.Parameter(torch.tensor(init_lovaz_log_var).float(), requires_grad=False)
+
+        if "focal" in losses_on:
+            self.focal_log_var.requires_grad = True
+            self.focal_loss = FocalLoss()
+        if "bce_with_logit" in losses_on:
+            self.bce_log_var.requires_grad = True
+            self.bce_loss = nn.BCEWithLogitsLoss()
+        if "dice" in losses_on:
+            self.dice_log_var.requires_grad = True
+            self.dice_loss = DiceLoss()
+        if "iou" in losses_on:
+            self.iou_log_var.requires_grad = True
+            self.iou_loss = IoULoss()
+        if "tversky" in losses_on:
+            self.tversky_log_var.requires_grad = True
+            self.tversky_loss = TverskyLoss()
+        if "focal_tversky" in losses_on:
+            self.focal_tversky_log_var.requires_grad = True
+            self.focal_tversky_loss = FocalTverskyLoss()
+        if "lovaz" in losses_on:
+            self.lovaz_log_var.requires_grad = True
+            self.lovaz_loss = LovaszHingeLoss()
+
+    def forward(self, outputs, labels, is_train=True):
+        total_loss = 0.0
+        loss_dict = {}
+        log_dict = {}
+
+        if "focal" in self.losses_on:
+            focal_loss = self.focal_loss(outputs, labels)
+            total_loss += focal_loss * torch.exp(-self.focal_log_var) + self.focal_log_var
+            loss_dict["focal"] = focal_loss * torch.exp(-self.focal_log_var)
+            log_dict["focal_var"] = torch.exp(-self.focal_log_var)
+
+        if "bce_with_logit" in self.losses_on:
+            bce_loss = self.bce_loss(outputs, labels)
+            total_loss += bce_loss * torch.exp(-self.bce_log_var) + self.bce_log_var
+            loss_dict["bce_with_logit"] = bce_loss * torch.exp(-self.bce_log_var)
+            log_dict["bce_with_logit_var"] = torch.exp(-self.bce_log_var)
+
+        if "dice" in self.losses_on:
+            dice_loss = self.dice_loss(outputs, labels)
+            total_loss += dice_loss * torch.exp(-self.dice_log_var) + self.dice_log_var
+            loss_dict["dice"] = dice_loss * torch.exp(-self.dice_log_var)
+            log_dict["dice_var"] = torch.exp(-self.dice_log_var)
+
+        if "iou" in self.losses_on:
+            iou_loss = self.iou_loss(outputs, labels)
+            total_loss += iou_loss * torch.exp(-self.iou_log_var) + self.iou_log_var
+            loss_dict["iou"] = iou_loss * torch.exp(-self.iou_log_var)
+            log_dict["iou_var"] = torch.exp(-self.iou_log_var)
+
+        if "tversky" in self.losses_on:
+            tversky_loss = self.tversky_loss(outputs, labels)
+            total_loss += tversky_loss * torch.exp(-self.tversky_log_var) + self.tversky_log_var
+            loss_dict["tversky"] = tversky_loss * torch.exp(-self.tversky_log_var)
+            log_dict["tversky_var"] = torch.exp(-self.tversky_log_var)
+
+        if "focal_tversky" in self.losses_on:
+            focal_tversky_loss = self.focal_tversky_loss(outputs, labels)
+            total_loss += focal_tversky_loss * torch.exp(-self.focal_tversky_log_var) + self.focal_tversky_log_var
+            loss_dict["focal_tversky"] = focal_tversky_loss * torch.exp(-self.focal_tversky_log_var)
+            log_dict["focal_tversky_var"] = torch.exp(-self.focal_tversky_log_var)
+
+        if "lovaz" in self.losses_on:
+            lovaz_loss = self.lovaz_loss(outputs, labels)
+            total_loss += lovaz_loss * torch.exp(-self.lovaz_log_var) + self.lovaz_log_var
+            loss_dict["lovaz"] = lovaz_loss * torch.exp(-self.lovaz_log_var)
+            log_dict["lovaz_var"] = torch.exp(-self.lovaz_log_var)
+
+        return total_loss, loss_dict, log_dict
+
+
 _criterion_entrypoints = {
     "cross_entropy": nn.CrossEntropyLoss,
     "focal": FocalLoss,
@@ -146,6 +252,7 @@ _criterion_entrypoints = {
     "tversky": TverskyLoss,
     "focal_tversky": FocalTverskyLoss,
     "lovaz": LovaszHingeLoss,
+    "multi_task": MultiTaskLoss,
 }
 
 

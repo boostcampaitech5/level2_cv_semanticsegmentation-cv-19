@@ -7,17 +7,19 @@ import re
 from importlib import import_module
 from pathlib import Path
 
+import albumentations as albu
 import numpy as np
+import segmentation_models_pytorch as smp
 import torch
-import wandb
-from losses.base_loss import DiceCoef, create_criterion
+from segmentation_models_pytorch.encoders import get_preprocessing_fn
 from torch import cuda
 from torch.utils.data import DataLoader
+
+import wandb
+from losses.base_loss import DiceCoef, create_criterion
 from trainer.trainer import Trainer
 from utils.util import ensure_dir
-import segmentation_models_pytorch as smp
-from segmentation_models_pytorch.encoders import get_preprocessing_fn
-import albumentations as albu
+
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -61,6 +63,7 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=config["batch_size"], help="input batch size for training (default: 64)")
 
     parser.add_argument("--model", type=str, default=config["model"], help="model type (default: UNet)")
+    parser.add_argument("--multi_task", type=str, default=config["multi_task"], help="whether use multi_task_loss (default: false)")
     parser.add_argument("--criterion", type=str, default=config["criterion"], help="criterion type (default: bce_with_logit)")
     parser.add_argument("--optimizer", type=str, default=config["optimizer"], help="optimizer type (default: Adam)")
     parser.add_argument("--lr_scheduler", type=str, default=config["lr_scheduler"], help="lr_scheduler type (default: StepLR)")
@@ -68,7 +71,7 @@ def parse_args():
     parser.add_argument("--num_workers", type=int, default=config["num_workers"])
 
     args = parser.parse_args()
-    args.smp['use'] = str2bool(args.smp['use'])
+    args.smp["use"] = str2bool(args.smp["use"])
     if args.is_debug:
         args.epochs = 2
     print(args)
@@ -84,7 +87,6 @@ def seed_everything(seed):
     torch.backends.cudnn.benchmark = False
     np.random.seed(seed)
     random.seed(seed)
-    
 
 
 def increment_path(path, exist_ok=False):
@@ -104,25 +106,28 @@ def increment_path(path, exist_ok=False):
         n = max(i) + 1 if i else 2
         return f"{path}{n}"
 
+
 def to_tensor(x, **kwargs):
-    return x.transpose(2, 0, 1).astype('float32')
+    return x.transpose(2, 0, 1).astype("float32")
+
 
 def get_preprocessing(preprocessing_fn):
     """Construct preprocessing transform
-    
+
     Args:
-        preprocessing_fn (callbale): data normalization function 
+        preprocessing_fn (callbale): data normalization function
             (can be specific for each pretrained neural network)
     Return:
         transform: albumentations.Compose
-    
+
     """
-    
+
     _transform = [
         albu.Lambda(image=preprocessing_fn),
         albu.Lambda(image=to_tensor, mask=to_tensor),
     ]
     return albu.Compose(_transform)
+
 
 def main(args):
     if args.is_wandb:
@@ -141,20 +146,24 @@ def main(args):
 
     # -- model
     preprocess_input = None
-    if args.smp['use']:
+    if args.smp["use"]:
         model_module = getattr(smp, args.model)
-        model = model_module(**dict(args.smp['args'])).to(device)
-        preprocess_input = get_preprocessing_fn(args.smp['args']['encoder_name'], args.smp['args']['encoder_weights'])
+        model = model_module(**dict(args.smp["args"])).to(device)
+        preprocess_input = get_preprocessing_fn(args.smp["args"]["encoder_name"], args.smp["args"]["encoder_weights"])
     else:
         model_file_name = args.model.lower() + "_custom"  # custom
         model_name = "model." + model_file_name
         model_module = getattr(import_module(model_name), args.model)  # default: UNet
         model = model_module().to(device)
-        
+
     # -- dataset
     dataset_module = getattr(import_module("datasets.base_dataset"), args.dataset)  # default: XRayDataset
-    train_dataset = dataset_module(IMAGE_ROOT, LABEL_ROOT, is_train=True, is_debug = args.is_debug, preprocessing = get_preprocessing(preprocess_input))
-    valid_dataset = dataset_module(IMAGE_ROOT, LABEL_ROOT, is_train=False, is_debug = args.is_debug, preprocessing = get_preprocessing(preprocess_input))
+    train_dataset = dataset_module(
+        IMAGE_ROOT, LABEL_ROOT, is_train=True, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
+    )
+    valid_dataset = dataset_module(
+        IMAGE_ROOT, LABEL_ROOT, is_train=False, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
+    )
 
     # -- augmentation
     transform_module = getattr(import_module("datasets.augmentation"), args.augmentation)  # default: BaseAugmentation
@@ -171,12 +180,15 @@ def main(args):
         num_workers=args.num_workers,
         drop_last=True,
     )
-    valid_loader = DataLoader(dataset=valid_dataset, batch_size=1, shuffle=False, num_workers=2, drop_last=False)
+    valid_loader = DataLoader(dataset=valid_dataset, batch_size=args.batch_size // 2, shuffle=False, num_workers=2, drop_last=False)
 
     # -- loss & metric
     criterion = []
-    for i in args.criterion:
-        criterion.append(create_criterion(i))  # default: [bce_with_logit]
+    if args.multi_task:
+        criterion.append(create_criterion("multi_task", losses_on=args.criterion))
+    else:
+        for i in args.criterion:
+            criterion.append(create_criterion(i))  # default: [bce_with_logit]
 
     opt_module = getattr(import_module("torch.optim"), args.optimizer["type"])  # default: AdamW
     optimizer = opt_module(filter(lambda p: p.requires_grad, model.parameters()), **dict(args.optimizer["args"]))
@@ -210,7 +222,7 @@ def main(args):
     trainer.train()
 
 
-# python train.py --config ./configs/queue/base_config.json
+# python train.py --config ./configs/queue/Unet_mixedPR_grad_accm_multi.json
 if __name__ == "__main__":
     args = parse_args()
     main(args)
