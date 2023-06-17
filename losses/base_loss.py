@@ -141,7 +141,7 @@ class MultiTaskLoss(nn.Module):
     Loss weights are learnt via homoscedastic uncertainty (Kendallet al.)
     """
 
-    def __init__(self, losses_on, init_loss_weights=None, reduction="mean", eps=1e-6):
+    def __init__(self, losses_on, reduction="mean", eps=1e-6):
         """
         :param losses_on: List of outputs to apply losses on.
         Subset of ['focal', 'bce_with_logit', 'dice', 'iou', 'tversky', 'focal_tversky', 'lovaz'].

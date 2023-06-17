@@ -185,13 +185,18 @@ def main(args):
     # -- loss & metric
     criterion = []
     if args.multi_task:
-        criterion.append(create_criterion("multi_task", losses_on=args.criterion))
+        criterion.append(create_criterion("multi_task", losses_on=args.criterion).to(device))
     else:
         for i in args.criterion:
             criterion.append(create_criterion(i))  # default: [bce_with_logit]
 
     opt_module = getattr(import_module("torch.optim"), args.optimizer["type"])  # default: AdamW
-    optimizer = opt_module(filter(lambda p: p.requires_grad, model.parameters()), **dict(args.optimizer["args"]))
+    if args.multi_task:
+        optimizer = opt_module(
+            list(filter(lambda p: p.requires_grad, model.parameters())) + list(criterion[0].parameters()), **dict(args.optimizer["args"])
+        )
+    else:
+        optimizer = opt_module(filter(lambda p: p.requires_grad, model.parameters()), **dict(args.optimizer["args"]))
 
     sche_module = getattr(import_module("torch.optim.lr_scheduler"), args.lr_scheduler["type"])  # default: ReduceLROnPlateau
     scheduler = sche_module(optimizer, **dict(args.lr_scheduler["args"]))

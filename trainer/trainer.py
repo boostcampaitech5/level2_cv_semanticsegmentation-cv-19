@@ -48,7 +48,7 @@ class Trainer(BaseTrainer):
         # metric_fn들이 각 df의 index로 들어감
         if args.multi_task:
             self.train_metrics = MetricTracker("Loss", *[c for c in self.args.criterion])  # DiceCoef
-            self.log_metrics = MetricTracker(*[f"{c}_log" for c in self.criterion])
+            self.log_metrics = MetricTracker(*[f"{c}_var" for c in self.args.criterion])
         else:
             self.train_metrics = MetricTracker("Loss", *[c.__class__.__name__ for c in self.criterion])  # DiceCoef
 
@@ -85,8 +85,8 @@ class Trainer(BaseTrainer):
                     total_loss, loss_dict, var_dict = self.criterion[0](output, target)
                     for loss_fn in loss_dict.keys():  # [bce_with_logit, ...]
                         logging_name = loss_fn
-                        print(self.train_metrics.result())
-                        print(self.log_metrics.result())
+                        # print(self.train_metrics.result())
+                        # print(self.log_metrics.result())
                         self.train_metrics.update(logging_name, loss_dict[logging_name].item())  # metric_fn마다 값 update
                         self.log_metrics.update(f"{logging_name}_var", var_dict[f"{logging_name}_var"].item())
                 else:
@@ -161,7 +161,7 @@ class Trainer(BaseTrainer):
                     output = F.interpolate(output, size=(mask_h, mask_w), mode="bilinear")
 
                 if self.args.multi_task:
-                    total_val_loss, _, _ = self.criterion(output, target)
+                    total_val_loss, _, _ = self.criterion[0](output, target)
                 else:
                     for loss_fn in self.criterion:  # [bce_with_logit, ...]
                         total_val_loss += loss_fn(output, target)
