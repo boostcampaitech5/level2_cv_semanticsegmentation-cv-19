@@ -3,12 +3,11 @@ import os
 
 import cv2
 import numpy as np
-import torch
 from sklearn.model_selection import GroupKFold
 from torch.utils.data import Dataset
 
 import constants
-from datasets.augmentation import BaseAugmentation, TestAugmentation
+from datasets.augmentation import TestAugmentation
 
 
 # root로부터 png, json을 읽고 순서를 matching해서 반환
@@ -75,7 +74,7 @@ def split_filename(is_train, pngs, jsons, is_debug):
 
 
 class XRayDataset(Dataset):
-    def __init__(self, IMAGE_ROOT, LABEL_ROOT, transforms=BaseAugmentation, is_train=False, is_debug=False, preprocessing=None):
+    def __init__(self, IMAGE_ROOT, LABEL_ROOT, transforms=None, is_train=False, is_debug=False, preprocessing=None):
         self.is_train = is_train
         self.transforms = transforms
         self.IMAGE_ROOT = IMAGE_ROOT
@@ -98,7 +97,6 @@ class XRayDataset(Dataset):
         image_path = os.path.join(self.IMAGE_ROOT, image_name)
 
         image = cv2.imread(image_path)
-        image = image / 255.0  # normalize
 
         label_name = self.labelnames[item]
         label_path = os.path.join(self.LABEL_ROOT, label_name)
@@ -124,22 +122,10 @@ class XRayDataset(Dataset):
             label[..., class_ind] = class_label
 
         if self.transforms is not None:
-            inputs = {"image": image, "mask": label} if self.is_train else {"image": image}
-            result = self.transforms(**inputs)
+            image, label = self.transforms(image, label)
 
-            image = result["image"]
-            label = result["mask"] if self.is_train else label
-        '''
-        if self.preprocessing:
-            sample = self.preprocessing(image=image, mask=label)
-            image, label = sample['image'], sample['mask']
-        '''
-        # to tenser will be done later
-        image = image.transpose(2, 0, 1)  # make channel first
-        label = label.transpose(2, 0, 1)
-
-        image = torch.from_numpy(image).float()
-        label = torch.from_numpy(label).float()
+        label = label.reshape(29, *image.shape[1:]).float()
+        # print(type(image), type(label))
 
         return image, label
 
@@ -172,16 +158,10 @@ class XRayInferenceDataset(Dataset):
         image_path = os.path.join(self.img_path, image_name)
 
         image = cv2.imread(image_path)
-        image = image / 255.0
 
         if self.transforms is not None:
             inputs = {"image": image}
             result = self.transforms(**inputs)
             image = result["image"]
-
-        # to tenser will be done later
-        image = image.transpose(2, 0, 1)  # make channel first
-
-        image = torch.from_numpy(image).float()
 
         return image, image_name

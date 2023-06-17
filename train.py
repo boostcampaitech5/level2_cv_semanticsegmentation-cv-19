@@ -7,17 +7,19 @@ import re
 from importlib import import_module
 from pathlib import Path
 
+import albumentations as albu
 import numpy as np
+import segmentation_models_pytorch as smp
 import torch
-import wandb
-from losses.base_loss import DiceCoef, create_criterion
+from segmentation_models_pytorch.encoders import get_preprocessing_fn
 from torch import cuda
 from torch.utils.data import DataLoader
+
+import wandb
+from losses.base_loss import DiceCoef, create_criterion
 from trainer.trainer import Trainer
 from utils.util import ensure_dir
-import segmentation_models_pytorch as smp
-from segmentation_models_pytorch.encoders import get_preprocessing_fn
-import albumentations as albu
+
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -68,7 +70,7 @@ def parse_args():
     parser.add_argument("--num_workers", type=int, default=config["num_workers"])
 
     args = parser.parse_args()
-    args.smp['use'] = str2bool(args.smp['use'])
+    args.smp["use"] = str2bool(args.smp["use"])
     if args.is_debug:
         args.epochs = 2
     print(args)
@@ -84,7 +86,6 @@ def seed_everything(seed):
     torch.backends.cudnn.benchmark = False
     np.random.seed(seed)
     random.seed(seed)
-    
 
 
 def increment_path(path, exist_ok=False):
@@ -104,25 +105,28 @@ def increment_path(path, exist_ok=False):
         n = max(i) + 1 if i else 2
         return f"{path}{n}"
 
+
 def to_tensor(x, **kwargs):
-    return x.transpose(2, 0, 1).astype('float32')
+    return x.transpose(2, 0, 1).astype("float32")
+
 
 def get_preprocessing(preprocessing_fn):
     """Construct preprocessing transform
-    
+
     Args:
-        preprocessing_fn (callbale): data normalization function 
+        preprocessing_fn (callbale): data normalization function
             (can be specific for each pretrained neural network)
     Return:
         transform: albumentations.Compose
-    
+
     """
-    
+
     _transform = [
         albu.Lambda(image=preprocessing_fn),
         albu.Lambda(image=to_tensor, mask=to_tensor),
     ]
     return albu.Compose(_transform)
+
 
 def main(args):
     if args.is_wandb:
@@ -134,6 +138,7 @@ def main(args):
 
     IMAGE_ROOT = os.path.join(args.root_dir, "train/DCM")
     LABEL_ROOT = os.path.join(args.root_dir, "train/outputs_json")
+    IMG_SIZE = int(args.root_dir.split("/")[-1][4:])
 
     # -- settings
     use_cuda = torch.cuda.is_available()
@@ -141,27 +146,35 @@ def main(args):
 
     # -- model
     preprocess_input = None
-    if args.smp['use']:
+    if args.smp["use"]:
         model_module = getattr(smp, args.model)
-        model = model_module(**dict(args.smp['args'])).to(device)
-        preprocess_input = get_preprocessing_fn(args.smp['args']['encoder_name'], args.smp['args']['encoder_weights'])
+        model = model_module(**dict(args.smp["args"])).to(device)
+        preprocess_input = get_preprocessing_fn(args.smp["args"]["encoder_name"], args.smp["args"]["encoder_weights"])
     else:
         model_file_name = args.model.lower() + "_custom"  # custom
         model_name = "model." + model_file_name
         model_module = getattr(import_module(model_name), args.model)  # default: UNet
         model = model_module().to(device)
-        
+
     # -- dataset
     dataset_module = getattr(import_module("datasets.base_dataset"), args.dataset)  # default: XRayDataset
-    train_dataset = dataset_module(IMAGE_ROOT, LABEL_ROOT, is_train=True, is_debug = args.is_debug, preprocessing = get_preprocessing(preprocess_input))
-    valid_dataset = dataset_module(IMAGE_ROOT, LABEL_ROOT, is_train=False, is_debug = args.is_debug, preprocessing = get_preprocessing(preprocess_input))
-
+    train_dataset = dataset_module(
+        IMAGE_ROOT, LABEL_ROOT, is_train=True, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
+    )
+    valid_dataset = dataset_module(
+        IMAGE_ROOT, LABEL_ROOT, is_train=False, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
+    )
+    
+    opt_module = getattr(import_module("torch.optim"), args.optimizer["type"])  # default: AdamW
+    optimizer = opt_module(filter(lambda p: p.requires_grad, model.parameters()), **dict(args.optimizer["args"]))
+    
     # -- augmentation
     transform_module = getattr(import_module("datasets.augmentation"), args.augmentation)  # default: BaseAugmentation
-    transform = transform_module
+    tr_transform = transform_module(img_size=IMG_SIZE, is_train=True)
+    val_transform = transform_module(img_size=IMG_SIZE, is_train=False)
 
-    train_dataset.set_transform(transform)
-    valid_dataset.set_transform(transform)
+    train_dataset.set_transform(tr_transform)
+    valid_dataset.set_transform(val_transform)
 
     # -- data_loader
     train_loader = DataLoader(
@@ -190,7 +203,7 @@ def main(args):
     with open(os.path.join(save_dir, "config.json"), "w", encoding="utf-8") as f:
         args_dict = vars(args)
         args_dict["model_dir"] = save_dir
-        args_dict["TestAugmentation"] = valid_dataset.get_transform().__str__()
+        # args_dict["TestAugmentation"] = valid_dataset.get_transform().__str__()
         json.dump(args_dict, f, ensure_ascii=False, indent=4)
 
     # --train

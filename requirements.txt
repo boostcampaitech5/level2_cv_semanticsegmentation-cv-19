@@ -12,3 +12,4 @@ efficientnet-pytorch==0.7.1
 timm==0.9.2
 pillow
 segmentation-models-pytorch
+transformers
