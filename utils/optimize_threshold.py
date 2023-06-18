@@ -4,17 +4,15 @@ import os
 import pickle
 from importlib import import_module
 
-import constants
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import segmentation_models_pytorch as smp
 import torch
 import torch.nn.functional as F
-from datasets.base_dataset import XRayDataset, XRayInferenceDataset
+from datasets.base_dataset import XRayDataset
 
 
-def load_model(saved_model, device):
+def load_model(exp_path, model_name, smp_model, device):
     if smp_model["use"]:
         model_module = getattr(smp, model_name)
         model = model_module(**dict(smp_model["args"])).to(device)
@@ -23,8 +21,8 @@ def load_model(saved_model, device):
         model_module = getattr(import_module(model_module_name), model_name)
         model = model_module().to(device)
 
-    model_path = os.path.join(saved_model, args.weights)
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    ckpt_path = os.path.join(exp_path, "best_epoch.pth")
+    model.load_state_dict(torch.load(ckpt_path, map_location=device))
 
     return model
 
@@ -75,16 +73,17 @@ def dice_coef(data, label, thr):
     return (2.0 * intersection + eps) / (np.sum(mask) + np.sum(label) + eps)
 
 
-def cal_best_thr(model, data_loader, save_path):
-    model = model.to(device)
-    model.eval()
+@torch.no_grad()
+def cal_best_thr(model, valid_loader, exp_path, device):
     class_total_data = [np.array([]) for _ in range(29)]
     class_total_label = [np.array([]) for _ in range(29)]
 
+    print("Validation..")
     # validation
+    model.eval()
     with torch.no_grad():
-        for idx, (image, label) in enumerate(data_loader):
-            print(f"Batch_{idx + 1}/{len(data_loader)} ...   ", end="")
+        for idx, (image, label) in enumerate(valid_loader):
+            print(f"Batch_{idx + 1}/{len(valid_loader)} ...   ", end="")
             image = image.to(device)
 
             # 추론
@@ -106,13 +105,13 @@ def cal_best_thr(model, data_loader, save_path):
             print("Done!")
 
     # optimize threshold
-    print("Optimize Threshold ...")
-    best_thresholds = []
+    print("\nOptimize Threshold ...")
+    best_thresholds, best_dicecoef = [], []
     thresholds = np.linspace(3, 100, num=98)
     _, ax = plt.subplots(6, 5, figsize=(48, 40))
     ax = ax.flatten()
     for i in range(29):
-        print(f"class {i +1}...   ")
+        print(f"class {i +1}...   ", end="")
         dices = []
         for threshold in thresholds:
             dices.append(dice_coef(class_total_data[i], class_total_label[i], threshold))
@@ -129,105 +128,37 @@ def cal_best_thr(model, data_loader, save_path):
         ax[i].set_title(f"class{i + 1}")
 
         best_thresholds.append(best_threshold / 100)
+        best_dicecoef.append(max(dices))
+        print("Done!")
 
-    plt.savefig(save_path)
-    print("Done!")
+    print("\nSave File...")
+    plt.savefig(os.path.join(exp_path, "threshold_dice_graph.png"))
 
-    return best_thresholds
+    with open(os.path.join(exp_path, "best_threshold.p"), "wb") as file:
+        pickle.dump(best_thresholds, file)
 
+    with open(os.path.join(exp_path, "best_dicecoef.p"), "wb") as file:
+        pickle.dump(best_dicecoef, file)
 
-def test(model, data_loader, best_thresholds):
-    model = model.to(device)
-    model.eval()
-
-    rles = []
-    filename_and_class = []
-    with torch.no_grad():
-        for idx, (images, image_names) in enumerate(data_loader):
-            print(f"Batch_{idx + 1}/{len(data_loader)} ...   ", end="")
-            images = images.to(device)
-            outputs = model(images)
-
-            # restore original size
-            outputs = F.interpolate(outputs, size=(2048, 2048), mode="bilinear")
-            outputs = torch.sigmoid(outputs).detach().cpu().numpy()
-
-            for i, thr in enumerate(best_thresholds):
-                outputs[:, i, :, :] = outputs[:, i, :, :] >= thr
-
-            for output, image_name in zip(outputs, image_names):
-                for c, segm in enumerate(output):
-                    rle = encode_mask_to_rle(segm)
-                    rles.append(rle)
-                    filename_and_class.append(f"{constants.IND2CLASS[c]}_{image_name}")
-            print("Done!")
-
-    return rles, filename_and_class
-
-
-@torch.no_grad()
-def inference(data_dir, args):
-    model = load_model(exp_path, device)
-
-    img_root = os.path.join(data_dir, "test/DCM")
-    dataset = XRayInferenceDataset(img_path=img_root)
-    if args.augmentation is not None:
-        transform = getattr(import_module("datasets.augmentation"), args.augmentation)
-        dataset.set_transform(transform)
-    loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=args.batch_size, shuffle=False, num_workers=2, drop_last=False)
-
-    if os.path.isfile(os.path.join(exp_path, "best_thr.p")):
-        with open(os.path.join(exp_path, "best_thr.p"), "rb") as file:
-            best_thresholds = pickle.load(file)
-    else:
-        valid_img_root = os.path.join(data_dir, "train/DCM")
-        valid_label_root = os.path.join(data_dir, "train/outputs_json")
-
-        valid_dataset = XRayDataset(valid_img_root, valid_label_root, is_train=False)
-        valid_loader = torch.utils.data.DataLoader(
-            dataset=valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers=2, drop_last=False
-        )
-        save_thr_path = os.path.join(exp_path, "class_best_thr.png")
-        print("Calculating Best Threshold..")
-
-        best_thresholds = cal_best_thr(model, valid_loader, save_thr_path)
-
-        with open(os.path.join(exp_path, "best_thr.p"), "wb") as file:  # james.p 파일을 바이너리 쓰기 모드(wb)로 열기
-            pickle.dump(best_thresholds, file)
-
+    print("\n[Best Threshold]")
     for i, thr in enumerate(best_thresholds):
         print(f"CLASS {i+1} : {thr}")
 
-    print("Calculating inference results..")
-    rles, filename_and_class = test(model, loader, best_thresholds)
-    classes, filename = zip(*[x.split("_") for x in filename_and_class])
-    image_name = [os.path.basename(f) for f in filename]
-    df = pd.DataFrame(
-        {
-            "image_name": image_name,
-            "class": classes,
-            "rle": rles,
-        }
-    )
-    save_path = os.path.join(exp_path, "output.csv")
-    df.to_csv(save_path, index=False)
-    print(f"Inference Done! Inference result saved at {save_path}")
+    print("\n[Best Dice Coefficient]")
+    for i, dice in enumerate(best_dicecoef):
+        print(f"CLASS {i+1} : {dice}")
+
+    return
 
 
 # python inference.py --exp Baseline
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    # Data and model checkpoints directories
-    use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda" if use_cuda else "cpu")
     parser.add_argument("--exp", type=str, default="Baseline", help="exp directory address")
-    parser.add_argument("--device", type=str, default=device, help="device (cuda or cpu)")
-    parser.add_argument("--weights", type=str, default="best_epoch.pth", help="model weights file (default: best_epoch.pth)")
     parser.add_argument("--batch_size", type=int, default=2, help="input batch size for validing (default: 2)")
-    parser.add_argument("--augmentation", type=str, default=None, help="augmentation from datasets.augmentation")
+    parser.add_argument("--input_data_dir", type=str, default=os.environ.get("SM_CHANNEL_EVAL", "/opt/ml/data1024"))
 
-    # Container environment
     parser.add_argument("--data_dir", type=str, default=os.environ.get("SM_CHANNEL_EVAL", "/opt/ml/data"))
 
     args = parser.parse_args()
@@ -237,9 +168,20 @@ if __name__ == "__main__":
         json_path = os.path.join(exp_path, json_file)
         with open(json_path, "r") as f:
             config = json.load(f)
+
     model_name = config["model"]
     smp_model = config["smp"]
     smp_model["use"] = str2bool(smp_model["use"])
-    data_dir = args.data_dir
-    device = args.device
-    inference(data_dir, args)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = load_model(exp_path, model_name, smp_model, device)
+
+    IMG_ROOT = os.path.join(args.input_data_dir, "train/DCM")
+    LABEL_ROOT = os.path.join(args.data_dir, "train/outputs_json")
+
+    valid_dataset = XRayDataset(IMG_ROOT, LABEL_ROOT, is_train=False)
+    valid_loader = torch.utils.data.DataLoader(
+        dataset=valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers=2, drop_last=False
+    )
+
+    cal_best_thr(model, valid_loader, exp_path, device)
