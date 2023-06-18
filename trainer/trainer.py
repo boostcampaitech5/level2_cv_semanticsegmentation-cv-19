@@ -115,7 +115,10 @@ class Trainer(BaseTrainer):
         if self.lr_scheduler is not None:
             if self.args.is_wandb:
                 wandb.log({"lr": self.optimizer.param_groups[0]["lr"]})
-            self.lr_scheduler.step(log["val_Loss"])
+            if self.args.lr_scheduler["args"] == "ReduceLROnPlateau":
+                self.lr_scheduler.step(log["val_Loss"])
+            else:
+                self.lr_scheduler.step()
 
         return log
 
