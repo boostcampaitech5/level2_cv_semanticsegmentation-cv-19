@@ -147,7 +147,9 @@ def main(args):
     ensure_dir(save_dir)
 
     IMAGE_ROOT = os.path.join(args.root_dir, "train/DCM")
-    LABEL_ROOT = os.path.join(args.root_dir, "train/outputs_json")
+    TR_LABEL_ROOT = os.path.join(args.root_dir, "train/outputs_json")
+    VAL_LABEL_ROOT = os.path.join('/opt/ml/data', "train/outputs_json")
+
     snippet = args.root_dir.split("/")[-1][4:]
     IMG_SIZE = int(snippet) if snippet else 2048
 
@@ -174,10 +176,10 @@ def main(args):
     # -- dataset
     dataset_module = getattr(import_module("datasets.base_dataset"), args.dataset)  # default: XRayDataset
     train_dataset = dataset_module(
-        IMAGE_ROOT, LABEL_ROOT, is_train=True, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
+        IMAGE_ROOT, TR_LABEL_ROOT, is_train=True, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
     )
     valid_dataset = dataset_module(
-        IMAGE_ROOT, LABEL_ROOT, is_train=False, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
+        IMAGE_ROOT, VAL_LABEL_ROOT, is_train=False, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
     )
 
     opt_module = getattr(import_module("torch.optim"), args.optimizer["type"])  # default: AdamW
