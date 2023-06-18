@@ -154,8 +154,7 @@ def main(args):
     IMG_SIZE = int(snippet) if snippet else 2048
 
     # -- settings
-    use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda" if use_cuda else "cpu")
+    device = args.device
 
     # -- model
     preprocess_input = None
