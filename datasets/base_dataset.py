@@ -3,6 +3,7 @@ import os
 
 import cv2
 import numpy as np
+import torch
 from sklearn.model_selection import GroupKFold
 from torch.utils.data import Dataset
 
@@ -124,8 +125,15 @@ class XRayDataset(Dataset):
         if self.transforms is not None:
             image, label = self.transforms(image, label)
 
-        image = image.float()
-        label = label.reshape(29, *image.shape[1:]).float()
+        # to tenser will be done later
+        image = image.transpose(2, 0, 1)  # make channel first
+        label = label.transpose(2, 0, 1)
+
+        image = torch.from_numpy(image).float() / 255.0
+        label = torch.from_numpy(label).float()
+
+        # image = image.float() / 255.0
+        # label = label.reshape(29, *image.shape[1:]).float()
         # print(type(image), type(label))
 
         return image, label

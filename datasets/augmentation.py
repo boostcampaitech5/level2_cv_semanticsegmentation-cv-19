@@ -1,5 +1,4 @@
 import albumentations as A
-from albumentations.pytorch import transforms
 
 
 class BaseAugmentation(object):
@@ -35,14 +34,12 @@ class BaseAugmentation(object):
                     # ),
                     # A.OneOf([A.Blur(blur_limit=3, p=1.0), A.MedianBlur(blur_limit=3, p=1.0)], p=0.1),
                     # A.CLAHE(clip_limit=(1, 4), p=1),
-                    transforms.ToTensorV2(p=1.0),
                 ]
             )
         else:
             return A.Compose(
                 [
                     A.Resize(self.img_size, self.img_size),
-                    transforms.ToTensorV2(p=1.0),
                 ]
             )
 
@@ -60,14 +57,12 @@ class CustomAugmentation(BaseAugmentation):
                         ],
                         p=0.9,
                     ),
-                    transforms.ToTensorV2(p=1.0),
                 ]
             )
         else:
             return A.Compose(
                 [
                     A.Resize(self.img_size, self.img_size),
-                    transforms.ToTensorV2(p=1.0),
                 ]
             )
 
@@ -86,14 +81,12 @@ class CustomAugmentation1(BaseAugmentation):
                         p=0.9,
                     ),
                     A.CLAHE(clip_limit=(1, 4), p=1),
-                    transforms.ToTensorV2(p=1.0),
                 ]
             )
         else:
             return A.Compose(
                 [
                     A.Resize(self.img_size, self.img_size),
-                    transforms.ToTensorV2(p=1.0),
                 ]
             )
 
@@ -113,14 +106,12 @@ class CustomAugmentation2(BaseAugmentation):
                     ),
                     A.OneOf([A.Blur(blur_limit=3, p=1.0), A.MedianBlur(blur_limit=3, p=1.0)], p=0.1),
                     A.CLAHE(clip_limit=(1, 4), p=1),
-                    transforms.ToTensorV2(p=1.0),
                 ]
             )
         else:
             return A.Compose(
                 [
                     A.Resize(self.img_size, self.img_size),
-                    transforms.ToTensorV2(p=1.0),
                 ]
             )
 
@@ -143,6 +134,5 @@ class TestAugmentation(BaseAugmentation):
         return A.Compose(
             [
                 A.Resize(2048, 2048),  # A.Resize(self.img_size, self.img_size),
-                transforms.ToTensorV2(p=1.0),
             ]
         )

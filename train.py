@@ -138,7 +138,8 @@ def main(args):
 
     IMAGE_ROOT = os.path.join(args.root_dir, "train/DCM")
     LABEL_ROOT = os.path.join(args.root_dir, "train/outputs_json")
-    IMG_SIZE = int(args.root_dir.split("/")[-1][4:])
+    snippet = args.root_dir.split("/")[-1][4:]
+    IMG_SIZE = int(snippet) if snippet else 2048
 
     # -- settings
     use_cuda = torch.cuda.is_available()
@@ -164,10 +165,10 @@ def main(args):
     valid_dataset = dataset_module(
         IMAGE_ROOT, LABEL_ROOT, is_train=False, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
     )
-    
+
     opt_module = getattr(import_module("torch.optim"), args.optimizer["type"])  # default: AdamW
     optimizer = opt_module(filter(lambda p: p.requires_grad, model.parameters()), **dict(args.optimizer["args"]))
-    
+
     # -- augmentation
     transform_module = getattr(import_module("datasets.augmentation"), args.augmentation)  # default: BaseAugmentation
     tr_transform = transform_module(img_size=IMG_SIZE, is_train=True)
