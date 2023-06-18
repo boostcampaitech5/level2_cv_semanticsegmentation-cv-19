@@ -117,8 +117,7 @@ class CustomAugmentation2(BaseAugmentation):
 
 
 class TestAugmentation(BaseAugmentation):
-    def __init__(self, img_size, is_train):
-        self.is_train = is_train
+    def __init__(self, img_size):
         self.img_size = img_size
         self.transforms = self.get_transforms()
 
@@ -132,7 +131,5 @@ class TestAugmentation(BaseAugmentation):
 
     def get_transforms(self):
         return A.Compose(
-            [
-                A.Resize(2048, 2048),  # A.Resize(self.img_size, self.img_size),
-            ]
+            [A.Resize(self.img_size, self.img_size)],
         )

@@ -1,23 +1,23 @@
 import argparse
 import json
 import os
+import time
 from importlib import import_module
 
-import albumentations as A
-import constants
 import numpy as np
 import pandas as pd
+import segmentation_models_pytorch as smp
 import torch
 import torch.nn.functional as F
+
+import constants
 from datasets.base_dataset import XRayInferenceDataset
-import segmentation_models_pytorch as smp
-from segmentation_models_pytorch.encoders import get_preprocessing_fn
-import albumentations as albu
+
 
 def load_model(saved_model, device):
     if smp_model["use"]:
         model_module = getattr(smp, model_name)
-        model = model_module(**dict(smp_model['args'])).to(device)
+        model = model_module(**dict(smp_model["args"])).to(device)
     else:
         model_module_name = "model." + model_name.lower() + "_custom"
         model_module = getattr(import_module(model_module_name), model_name)
@@ -28,6 +28,7 @@ def load_model(saved_model, device):
 
     return model
 
+
 def str2bool(v):
     if isinstance(v, bool):
         return v
@@ -37,6 +38,7 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError("Boolean value expected.")
+
 
 def encode_mask_to_rle(mask):
     """
@@ -92,13 +94,16 @@ def test(model, data_loader, thr=0.5):
 
 @torch.no_grad()
 def inference(data_dir, args):
+    start = time.time()
     model = load_model(exp_path, device)
 
     img_root = os.path.join(data_dir, "test/DCM")
     dataset = XRayInferenceDataset(img_path=img_root)
-    if args.augmentation != None:
-        transform = getattr(import_module("datasets.augmentation"), args.augmentation) 
+    if args.augmentation is not None:
+        transform_module = getattr(import_module("datasets.augmentation"), args.augmentation)
+        transform = transform_module(img_size=args.img_size, is_train=True)
         dataset.set_transform(transform)
+
     loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=args.batch_size, shuffle=False, num_workers=2, drop_last=False)
     print("Calculating inference results..")
     rles, filename_and_class = test(model, loader)
@@ -114,9 +119,11 @@ def inference(data_dir, args):
     save_path = os.path.join(exp_path, f"{args.exp}.csv")
     df.to_csv(save_path, index=False)
     print(f"Inference Done! Inference result saved at {save_path}")
+    print(f"Inference time : {time.time()-start:.3f}s")
+    print()
 
 
-# python inference.py --exp Baseline
+# python inference.py --exp debug_aug3 --img_size 1024
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
@@ -130,6 +137,7 @@ if __name__ == "__main__":
     parser.add_argument("--augmentation", type=str, default=None, help="augmentation from datasets.augmentation")
     # Container environment
     parser.add_argument("--data_dir", type=str, default=os.environ.get("SM_CHANNEL_EVAL", "/opt/ml/data"))
+    parser.add_argument("--img_size", type=int, default=1024)
 
     args = parser.parse_args()
     exp_path = os.path.join("./outputs", args.exp)
@@ -139,8 +147,8 @@ if __name__ == "__main__":
         with open(json_path, "r") as f:
             config = json.load(f)
     model_name = config["model"]
-    smp_model = config['smp']
-    smp_model['use'] = str2bool(smp_model['use'])
+    smp_model = config["smp"]
+    smp_model["use"] = str2bool(smp_model["use"])
     data_dir = args.data_dir
     device = args.device
     inference(data_dir, args)
