@@ -124,6 +124,7 @@ class XRayDataset(Dataset):
         if self.transforms is not None:
             image, label = self.transforms(image, label)
 
+        image = image.float()
         label = label.reshape(29, *image.shape[1:]).float()
         # print(type(image), type(label))
 
