@@ -39,6 +39,7 @@ def parse_args():
     parser.add_argument("--config", type=str, default="./configs/queue/base_config.json", help="config file address")
     # Container environment
     parser.add_argument("--model_dir", type=str, default=os.environ.get("SM_MODEL_DIR", "./outputs"), help="model save at {SM_MODEL_DIR}")
+    parser.add_argument("--ckpt", type=str, default=None)
     parser.add_argument("--device", default="cuda" if cuda.is_available() else "cpu")
     args = parser.parse_args()
     with open(args.config, "r") as f:
@@ -106,6 +107,15 @@ def increment_path(path, exist_ok=False):
         return f"{path}{n}"
 
 
+def load_model(model_name, ckpt_path, device):
+    model_module_name = "model." + model_name.lower() + "_custom"
+    model_module = getattr(import_module(model_module_name), model_name)
+    model = model_module().to(device)
+    model.load_state_dict(torch.load(ckpt_path, map_location=device))
+
+    return model
+
+
 def to_tensor(x, **kwargs):
     return x.transpose(2, 0, 1).astype("float32")
 
@@ -147,7 +157,11 @@ def main(args):
 
     # -- model
     preprocess_input = None
-    if args.smp["use"]:
+    if args.ckpt is not None:
+        exp_path = os.path.join("./outputs", args.ckpt)
+        ckpt_path = os.path.join(exp_path, "best_epoch.pth")
+        model = load_model(args.model, ckpt_path, device)
+    elif args.smp["use"]:
         model_module = getattr(smp, args.model)
         model = model_module(**dict(args.smp["args"])).to(device)
         preprocess_input = get_preprocessing_fn(args.smp["args"]["encoder_name"], args.smp["args"]["encoder_weights"])
