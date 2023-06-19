@@ -210,8 +210,14 @@ def main(args):
     opt_module = getattr(import_module("torch.optim"), args.optimizer["type"])  # default: AdamW
     optimizer = opt_module(filter(lambda p: p.requires_grad, model.parameters()), **dict(args.optimizer["args"]))
 
-    sche_module = getattr(import_module("torch.optim.lr_scheduler"), args.lr_scheduler["type"])  # default: ReduceLROnPlateau
-    scheduler = sche_module(optimizer, **dict(args.lr_scheduler["args"]))
+    if args.lr_scheduler["type"] == "CosineAnnealingWarmupRestarts":
+        from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
+
+        scheduler = CosineAnnealingWarmupRestarts(optimizer, **dict(args.lr_scheduler["args"]))
+    else:
+        sche_module = getattr(import_module("torch.optim.lr_scheduler"), args.lr_scheduler["type"])  # default: ReduceLROnPlateau
+        scheduler = sche_module(optimizer, **dict(args.lr_scheduler["args"]))
+
 
     metrics = [DiceCoef()]
 
