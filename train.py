@@ -69,8 +69,6 @@ def parse_args():
 
     args = parser.parse_args()
     args.smp['use'] = str2bool(args.smp['use'])
-    if args.is_debug:
-        args.epochs = 2
     print(args)
 
     return args

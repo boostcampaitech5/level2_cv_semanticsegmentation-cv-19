@@ -4,7 +4,7 @@ import os
 import cv2
 import numpy as np
 import torch
-from sklearn.model_selection import GroupKFold
+from sklearn.model_selection import GroupKFold, StratifiedGroupKFold
 from torch.utils.data import Dataset
 
 import constants
@@ -48,28 +48,38 @@ def split_filename(is_train, pngs, jsons, is_debug):
     # 동일 인물의 손이 train, valid에 따로 들어가는 것을 방지합니다.
     groups = [os.path.dirname(fname) for fname in pngs]
 
-    # dummy label
-    ys = [0 for fname in pngs]
-
-    # 전체 데이터의 20%를 validation data로 쓰기 위해 `n_splits`를
-    # 5으로 설정하여 GroupKFold를 수행합니다.
-    if is_debug:
-        gkf = GroupKFold(n_splits=25)
-    else:
-        gkf = GroupKFold(n_splits=5)
+    # 손목 꺾인 label
+    ys = [1 if (274 <= int(os.path.dirname(fname)[2:]) <= 319) or int(os.path.dirname(fname)[2:]) == 321 else 0 for fname in pngs]
+    
     train_filenames = []
     train_labelnames = []
     valid_filenames = []
     valid_labelnames = []
-    for i, (x, y) in enumerate(gkf.split(pngs, ys, groups)):
-        # 0번을 validation dataset으로 사용합니다.
-        if i == 0:
-            valid_filenames += list(pngs[y])
-            valid_labelnames += list(jsons[y])
+    
+    if is_debug:
+        gkf = GroupKFold(n_splits=25)
+        for i, (x, y) in enumerate(gkf.split(pngs, ys, groups)):
+            # 0번을 validation dataset으로 사용합니다.
+            if i == 0:
+                valid_filenames += list(pngs[y])
+                valid_labelnames += list(jsons[y])
 
-        elif i < 5:
-            train_filenames += list(pngs[y])
-            train_labelnames += list(jsons[y])
+            elif i < 5:
+                train_filenames += list(pngs[y])
+                train_labelnames += list(jsons[y])
+    else:
+        sgkf = StratifiedGroupKFold(n_splits=5)
+        train, test = next(sgkf.split(pngs, ys, groups))
+        ys = np.array(ys)
+        train_filenames = list(pngs[train])
+        train_labelnames = list(jsons[train])
+        train_filenames.extend(np.array(train_filenames)[ys[train]==1]) #oversampling
+        train_labelnames.extend(np.array(train_labelnames)[ys[train]==1]) #oversampling
+        
+        valid_filenames = list(pngs[test])
+        valid_labelnames = list(jsons[test])
+    
+    
 
     return [train_filenames, train_labelnames] if is_train else [valid_filenames, valid_labelnames]
 
