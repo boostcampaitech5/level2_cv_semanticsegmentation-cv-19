@@ -62,6 +62,11 @@ class Trainer(BaseTrainer):
         self.model.train()
         self.train_metrics.reset()
         for batch_idx, (data, target) in enumerate(self.train_loader):
+            # dt = data[0].detach().cpu().numpy()  # .transpose(1, 2, 0)
+            # print(dt.shape)
+            # print(dt.max(), dt.min())
+            # cv2.imwrite(f"./example/cropAug/ex_{batch_idx}.png", dt[0] * 255)
+
             data, target = data.to(self.device), target.to(self.device)
             total_loss = 0
 
