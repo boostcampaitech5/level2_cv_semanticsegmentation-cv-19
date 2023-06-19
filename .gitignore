@@ -119,3 +119,4 @@ code_testing/
 log*.txt
 streamlit/
 deprecated/
+example/

@@ -8,7 +8,6 @@ from sklearn.model_selection import GroupKFold
 from torch.utils.data import Dataset
 
 import constants
-from datasets.augmentation import TestAugmentation
 
 
 # root로부터 png, json을 읽고 순서를 matching해서 반환
@@ -98,12 +97,16 @@ class XRayDataset(Dataset):
         image_path = os.path.join(self.IMAGE_ROOT, image_name)
 
         image = cv2.imread(image_path)
+        if self.is_train:
+            img_size = image.shape
+        else:
+            img_size = (2048, 2048, 29)
 
         label_name = self.labelnames[item]
         label_path = os.path.join(self.LABEL_ROOT, label_name)
 
         # process a label of shape (H, W, NC)
-        label_shape = tuple(image.shape[:2]) + (len(constants.CLASSES),)
+        label_shape = tuple(img_size[:2]) + (len(constants.CLASSES),)
         label = np.zeros(label_shape, dtype=np.uint8)
 
         # read label file
@@ -118,12 +121,15 @@ class XRayDataset(Dataset):
             points = np.array(ann["points"])
 
             # polygon to mask
-            class_label = np.zeros(image.shape[:2], dtype=np.uint8)
+            class_label = np.zeros(img_size[:2], dtype=np.uint8)
             cv2.fillPoly(class_label, [points], 1)
             label[..., class_ind] = class_label
 
         if self.transforms is not None:
-            image, label = self.transforms(image, label)
+            if self.is_train:
+                image, label = self.transforms(image, label)
+            else:
+                image, _ = self.transforms(image)
 
         # to tenser will be done later
         image = image.transpose(2, 0, 1)  # make channel first
@@ -140,7 +146,7 @@ class XRayDataset(Dataset):
 
 
 class XRayInferenceDataset(Dataset):
-    def __init__(self, img_path, transforms=TestAugmentation):
+    def __init__(self, img_path, transforms=None):
         pngs = {
             os.path.relpath(os.path.join(root, fname), start=img_path)
             for root, _dirs, files in os.walk(img_path)
@@ -169,6 +175,9 @@ class XRayInferenceDataset(Dataset):
         image = cv2.imread(image_path)
 
         if self.transforms is not None:
-            image = self.transforms(image)
+            image, _ = self.transforms(image)
+
+        image = image.transpose(2, 0, 1)  # make channel first
+        image = torch.from_numpy(image).float() / 255.0
 
         return image, image_name

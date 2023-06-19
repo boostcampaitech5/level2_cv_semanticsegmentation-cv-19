@@ -7,7 +7,7 @@ class BaseAugmentation(object):
         self.img_size = img_size
         self.transforms = self.get_transforms()
 
-    def __call__(self, image, label):
+    def __call__(self, image, label=None):
         inputs = {"image": image}
         if label is not None:
             inputs["mask"] = label
@@ -41,13 +41,12 @@ class CustomAugmentation(BaseAugmentation):
             return A.Compose(
                 [
                     A.Resize(self.img_size, self.img_size),
-                    A.OneOf(
-                        [
-                            A.HueSaturationValue(hue_shift_limit=0.2, sat_shift_limit=0.2, val_shift_limit=0.2, p=0.9),
-                            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.9),
-                        ],
-                        p=0.9,
-                    ),
+                    A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.1, p=0.7),
+                    # A.RandomResizedCrop(1024, 1024, scale=(0.5, 1.0), ratio=(1.0, 1.0), always_apply=False, p=1.0),
+                    A.ElasticTransform(alpha=15.0, sigma=2.0),
+                    A.OneOf([A.Blur(blur_limit=2, p=1.0), A.MedianBlur(blur_limit=3, p=1.0)], p=0.2),
+                    A.HorizontalFlip(p=0.5),
+                    A.CLAHE(clip_limit=(1, 4), p=0.6),
                 ]
             )
         else:
@@ -64,14 +63,12 @@ class CustomAugmentation1(BaseAugmentation):
             return A.Compose(
                 [
                     A.Resize(self.img_size, self.img_size),
-                    A.OneOf(
-                        [
-                            A.HueSaturationValue(hue_shift_limit=0.2, sat_shift_limit=0.2, val_shift_limit=0.2, p=0.9),
-                            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.9),
-                        ],
-                        p=0.9,
-                    ),
-                    A.CLAHE(clip_limit=(1, 4), p=1),
+                    A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.1, p=0.7),
+                    # A.RandomResizedCrop(1024, 1024, scale=(0.5, 1.0), ratio=(1.0, 1.0), always_apply=False, p=1.0),
+                    # A.ElasticTransform(alpha=15.0, sigma=2.0),
+                    A.OneOf([A.Blur(blur_limit=2, p=1.0), A.MedianBlur(blur_limit=3, p=1.0)], p=0.2),
+                    A.HorizontalFlip(p=0.5),
+                    A.CLAHE(clip_limit=(1, 4), p=0.4),
                 ]
             )
         else:
@@ -87,22 +84,19 @@ class CustomAugmentation2(BaseAugmentation):
         if self.is_train:
             return A.Compose(
                 [
-                    A.Resize(self.img_size, self.img_size),
-                    A.OneOf(
-                        [
-                            A.HueSaturationValue(hue_shift_limit=0.2, sat_shift_limit=0.2, val_shift_limit=0.2, p=0.9),
-                            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.9),
-                        ],
-                        p=0.9,
-                    ),
-                    A.OneOf([A.Blur(blur_limit=3, p=1.0), A.MedianBlur(blur_limit=3, p=1.0)], p=0.1),
-                    A.CLAHE(clip_limit=(1, 4), p=1),
+                    # A.Resize(self.img_size, self.img_size),
+                    # A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.1, p=0.7),
+                    A.RandomResizedCrop(1024, 1024, scale=(0.5, 1.0), ratio=(1.0, 1.0), always_apply=False, p=1.0),
+                    # A.ElasticTransform(alpha=15.0, sigma=2.0),
+                    # A.OneOf([A.Blur(blur_limit=2, p=1.0), A.MedianBlur(blur_limit=3, p=1.0)], p=0.2),
+                    # A.HorizontalFlip(p=0.5),
+                    # A.CLAHE(clip_limit=(1, 4), p=0.4),
                 ]
             )
         else:
             return A.Compose(
                 [
-                    A.Resize(self.img_size, self.img_size),
+                    A.Resize(1024, 1024),
                 ]
             )
 
