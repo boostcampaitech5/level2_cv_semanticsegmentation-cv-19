@@ -1,9 +1,9 @@
 import argparse
 import json
 import os
+import pickle
 from importlib import import_module
 
-import albumentations as A
 import constants
 import numpy as np
 import pandas as pd
@@ -11,13 +11,12 @@ import torch
 import torch.nn.functional as F
 from datasets.base_dataset import XRayInferenceDataset
 import segmentation_models_pytorch as smp
-from segmentation_models_pytorch.encoders import get_preprocessing_fn
-import albumentations as albu
+
 
 def load_model(saved_model, device):
     if smp_model["use"]:
         model_module = getattr(smp, model_name)
-        model = model_module(**dict(smp_model['args'])).to(device)
+        model = model_module(**dict(smp_model["args"])).to(device)
     else:
         model_module_name = "model." + model_name.lower() + "_custom"
         model_module = getattr(import_module(model_module_name), model_name)
@@ -28,6 +27,7 @@ def load_model(saved_model, device):
 
     return model
 
+
 def str2bool(v):
     if isinstance(v, bool):
         return v
@@ -37,6 +37,7 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError("Boolean value expected.")
+
 
 def encode_mask_to_rle(mask):
     """
@@ -65,43 +66,48 @@ def decode_rle_to_mask(rle, height, width):
     return img.reshape(height, width)
 
 
-def test(model, data_loader, thr=0.5):
-    model = model.to(device)
-    model.eval()
-
+def test(model, data_loader, thresholds):
     rles = []
     filename_and_class = []
+
+    print("Inference..")
+    model.eval()
     with torch.no_grad():
-        for _, (images, image_names) in enumerate(data_loader):
+        for idx, (images, image_names) in enumerate(data_loader):
+            print(f"Batch_{idx + 1}/{len(data_loader)} ...   ", end="")
             images = images.to(device)
             outputs = model(images)
 
             # restore original size
             outputs = F.interpolate(outputs, size=(2048, 2048), mode="bilinear")
-            outputs = torch.sigmoid(outputs)
-            outputs = (outputs > thr).detach().cpu().numpy()
+            outputs = torch.sigmoid(outputs).detach().cpu().numpy()
+
+            for i, thr in enumerate(thresholds):
+                outputs[:, i, :, :] = outputs[:, i, :, :] >= thr
 
             for output, image_name in zip(outputs, image_names):
                 for c, segm in enumerate(output):
                     rle = encode_mask_to_rle(segm)
                     rles.append(rle)
                     filename_and_class.append(f"{constants.IND2CLASS[c]}_{image_name}")
+            print("Done!")
 
     return rles, filename_and_class
 
 
 @torch.no_grad()
-def inference(data_dir, args):
+def inference(data_dir, args, thresholds):
     model = load_model(exp_path, device)
 
     img_root = os.path.join(data_dir, "test/DCM")
     dataset = XRayInferenceDataset(img_path=img_root)
     if args.augmentation != None:
-        transform = getattr(import_module("datasets.augmentation"), args.augmentation) 
+        transform = getattr(import_module("datasets.augmentation"), args.augmentation)
         dataset.set_transform(transform)
     loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=args.batch_size, shuffle=False, num_workers=2, drop_last=False)
+
     print("Calculating inference results..")
-    rles, filename_and_class = test(model, loader)
+    rles, filename_and_class = test(model, loader, thresholds)
     classes, filename = zip(*[x.split("_") for x in filename_and_class])
     image_name = [os.path.basename(f) for f in filename]
     df = pd.DataFrame(
@@ -125,22 +131,38 @@ if __name__ == "__main__":
     device = torch.device("cuda" if use_cuda else "cpu")
     parser.add_argument("--exp", type=str, default="Baseline", help="exp directory address")
     parser.add_argument("--device", type=str, default=device, help="device (cuda or cpu)")
-    parser.add_argument("--weights", type=str, default="best_epoch.pth", help="model weights file (default: best.pth)")
-    parser.add_argument("--batch_size", type=int, default=8, help="input batch size for validing (default: 1000)")
+    parser.add_argument("--weights", type=str, default="best_epoch.pth", help="model weights file (default: best_epoch.pth)")
+    parser.add_argument("--batch_size", type=int, default=4, help="input batch size for validing (default: 4)")
     parser.add_argument("--augmentation", type=str, default=None, help="augmentation from datasets.augmentation")
+    parser.add_argument("--not_use_threshold", action="store_true")
+
     # Container environment
     parser.add_argument("--data_dir", type=str, default=os.environ.get("SM_CHANNEL_EVAL", "/opt/ml/data"))
 
     args = parser.parse_args()
     exp_path = os.path.join("./outputs", args.exp)
+
+    if args.not_use_threshold:
+        thresholds = [0.5 for _ in range(29)]
+    else:
+        threshold_path = os.path.join(exp_path, "best_dicecoef.p")
+        assert os.path.isfile(threshold_path), "please run utils/optimize_threshold.py"
+        print("Load Best Threshold...  ", end="")
+        with open(threshold_path, "rb") as file:
+            thresholds = pickle.load(file)
+        print("Done!")
+
+    for i, thr in enumerate(thresholds):
+        print(f"CLASS {i+1} : {thr}")
+
     json_file = next((file for file in os.listdir(exp_path) if file.endswith(".json")), None)
     if json_file:
         json_path = os.path.join(exp_path, json_file)
         with open(json_path, "r") as f:
             config = json.load(f)
     model_name = config["model"]
-    smp_model = config['smp']
-    smp_model['use'] = str2bool(smp_model['use'])
+    smp_model = config["smp"]
+    smp_model["use"] = str2bool(smp_model["use"])
     data_dir = args.data_dir
     device = args.device
-    inference(data_dir, args)
+    inference(data_dir, args, thresholds)
