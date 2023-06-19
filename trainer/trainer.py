@@ -2,9 +2,8 @@ import time
 
 import torch
 import torch.nn.functional as F
-from torch.cuda.amp import GradScaler, autocast
-
 import wandb
+from torch.cuda.amp import GradScaler, autocast
 from trainer.base_trainer import BaseTrainer
 from utils.util import MetricTracker, inf_loop
 
@@ -120,7 +119,7 @@ class Trainer(BaseTrainer):
         if self.lr_scheduler is not None:
             if self.args.is_wandb:
                 wandb.log({"lr": self.optimizer.param_groups[0]["lr"]})
-            if self.args.lr_scheduler["args"] == "ReduceLROnPlateau":
+            if self.args.lr_scheduler["type"] == "ReduceLROnPlateau":
                 self.lr_scheduler.step(log["val_Loss"])
             else:
                 self.lr_scheduler.step()
