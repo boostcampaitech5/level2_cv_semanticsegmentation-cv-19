@@ -2,7 +2,10 @@ import argparse
 import json
 import os
 import pickle
+import sys
 from importlib import import_module
+
+sys.path.insert(0, os.getcwd())
 
 import matplotlib.pyplot as plt
 import numpy as np
