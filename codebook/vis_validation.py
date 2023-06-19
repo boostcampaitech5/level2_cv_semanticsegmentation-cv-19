@@ -1,11 +1,16 @@
 import argparse
+import glob
+import json
 import os
+import re
 import sys
 from importlib import import_module
+from pathlib import Path
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+import segmentation_models_pytorch as smp
 import torch
 import torch.nn.functional as F
 from sklearn.model_selection import GroupKFold
@@ -76,6 +81,17 @@ PALETTE = [
 ]
 
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    elif v.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    else:
+        raise argparse.ArgumentTypeError("Boolean value expected.")
+
+
 def collect_img(IMAGE_ROOT):
     pngs = {
         os.path.relpath(os.path.join(root, fname), start=IMAGE_ROOT)
@@ -87,6 +103,20 @@ def collect_img(IMAGE_ROOT):
     pngs = np.array(pngs)
 
     return pngs
+
+
+def load_model(model_name, ckpt_path, smp_model, device):
+    if smp_model["use"]:
+        model_module = getattr(smp, model_name)
+        model = model_module(**dict(smp_model["args"])).to(device)
+    else:
+        model_module_name = "model." + model_name.lower() + "_custom"
+        model_module = getattr(import_module(model_module_name), model_name)
+        model = model_module().to(device)
+
+    model.load_state_dict(torch.load(ckpt_path, map_location=device))
+
+    return model
 
 
 def validation_filename(pngs):
@@ -164,7 +194,20 @@ def draw_and_save(image, label, pred, save_path):
     plt.savefig(save_path)
 
 
-def inference(cfg):
+def increment_path(path):
+    path = Path(path)
+    if not path.exists():
+        return str(path)
+    else:
+        dirs = glob.glob(f"{path}*")
+        matches = [re.search(r"%s(\d+)" % path.stem, d) for d in dirs]
+        i = [int(m.groups()[0]) for m in matches if m]
+        n = max(i) + 1 if i else 2
+
+        return f"{path}{n}"
+
+
+def inference(cfg, exp_path, model_name, ckpt_path, smp_model):
     dataset_module = getattr(import_module("datasets.base_dataset"), "XRayDataset")
 
     IMAGE_ROOT = os.path.join(cfg.data_path, "train/DCM")
@@ -174,7 +217,7 @@ def inference(cfg):
     filenames = validation_filename(pngs)
 
     valid_dataset = dataset_module(IMAGE_ROOT, LABEL_ROOT, is_train=False)
-    valid_loader = DataLoader(dataset=valid_dataset, batch_size=1, shuffle=False, num_workers=0, drop_last=False)
+    valid_loader = DataLoader(dataset=valid_dataset, batch_size=cfg.batch_size, shuffle=False, num_workers=0, drop_last=False)
 
     # -- settings
     assert torch.cuda.is_available(), "CUDA ERROR"
@@ -182,40 +225,38 @@ def inference(cfg):
 
     # -- model load
     print("Model Load...    ", end=" ")
-    model_module_name = "model." + cfg.model_name.lower() + "_custom"
-    model_module = getattr(import_module(model_module_name), cfg.model_name)
-    model = model_module().to(device)
-    model.load_state_dict(torch.load(cfg.ckpt_path, map_location=device))
-    model.eval()
+    model = load_model(model_name, ckpt_path, smp_model, device)
     print("Done!")
 
+    # -- save path
+    save_path = increment_path(os.path.join(exp_path, "visualize_val"))
+    os.mkdir(save_path)
+
     # -- inference
+    model.eval()
     with torch.no_grad():
         for i, (data, label) in enumerate(valid_loader):
-            print(f"Draw {filenames[i]} ...    ", end="")
-            data, label = data.to(device), label.to(device)
+            data = data.to(device)
 
             pred = model(data)
             pred = torch.sigmoid(pred)
-            pred = F.interpolate(pred, size=(2048, 2048), mode="bilinear")
+            pred = F.interpolate(pred, size=(label.size(-2), label.size(-1)), mode="bilinear")
             pred = (pred > 0.5).detach().cpu().numpy()
 
-            label = F.interpolate(label, size=(2048, 2048), mode="bilinear")
-            label = (label > 0.5).detach().cpu().numpy()
-
-            image = 255 - cv2.imread(os.path.join(IMAGE_ROOT, filenames[i]))
-            pred, label = pred[0], label[0]
-            save_path = os.path.join(cfg.save_path, os.path.basename(filenames[i]))
-            draw_and_save(image, label, pred, save_path)
-            print("Done!")
+            label = label.numpy()
+            for idx in range(cfg.batch_size):
+                print(f"Draw {filenames[i * cfg.batch_size + idx]} ...    ", end="")
+                file_path = os.path.join(save_path, os.path.basename(filenames[i * cfg.batch_size + idx]))
+                image = 255 - cv2.imread(os.path.join(IMAGE_ROOT, filenames[i * cfg.batch_size + idx]))
+                draw_and_save(image, label[idx], pred[idx], file_path)
+                print("Done!")
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--data_path", type=str, required=True)
-    parser.add_argument("-m", "--model_name", type=str, required=True)
-    parser.add_argument("-c", "--ckpt_path", type=str, required=True)
-    parser.add_argument("-s", "--save_path", type=str, required=True)
+    parser.add_argument("--exp", type=str, required=True, help="exp directory address")
+    parser.add_argument("--data_path", "-d", type=str, default=os.environ.get("SM_CHANNEL_EVAL", "/opt/ml/data"))
+    parser.add_argument("--batch_size", type=int, default=2)
     args = parser.parse_args()
 
     return args
@@ -226,8 +267,17 @@ if __name__ == "__main__":
     sys.path.insert(1, os.path.abspath("."))
 
     cfg = parse_args()
-    assert os.path.isdir(cfg.data_path)
-    assert os.path.isdir(cfg.save_path)
-    assert os.path.isfile(cfg.ckpt_path)
+    exp_path = os.path.join("./outputs", cfg.exp)
+    assert os.path.isdir(exp_path)
 
-    inference(cfg)
+    json_file = next((file for file in os.listdir(exp_path) if file.endswith(".json")), None)
+    if json_file:
+        json_path = os.path.join(exp_path, json_file)
+        with open(json_path, "r") as f:
+            config = json.load(f)
+    model_name = config["model"]
+    ckpt_path = os.path.join(exp_path, "best_epoch.pth")
+    smp_model = config["smp"]
+    smp_model["use"] = str2bool(smp_model["use"])
+
+    inference(cfg, exp_path, model_name, ckpt_path, smp_model)

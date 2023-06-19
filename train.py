@@ -39,6 +39,7 @@ def parse_args():
     parser.add_argument("--config", type=str, default="./configs/queue/base_config.json", help="config file address")
     # Container environment
     parser.add_argument("--model_dir", type=str, default=os.environ.get("SM_MODEL_DIR", "./outputs"), help="model save at {SM_MODEL_DIR}")
+    parser.add_argument("--ckpt", type=str, default=None)
     parser.add_argument("--device", default="cuda" if cuda.is_available() else "cpu")
     args = parser.parse_args()
     with open(args.config, "r") as f:
@@ -107,6 +108,15 @@ def increment_path(path, exist_ok=False):
         return f"{path}{n}"
 
 
+def load_model(model_name, ckpt_path, device):
+    model_module_name = "model." + model_name.lower() + "_custom"
+    model_module = getattr(import_module(model_module_name), model_name)
+    model = model_module().to(device)
+    model.load_state_dict(torch.load(ckpt_path, map_location=device))
+
+    return model
+
+
 def to_tensor(x, **kwargs):
     return x.transpose(2, 0, 1).astype("float32")
 
@@ -138,15 +148,22 @@ def main(args):
     ensure_dir(save_dir)
 
     IMAGE_ROOT = os.path.join(args.root_dir, "train/DCM")
-    LABEL_ROOT = os.path.join(args.root_dir, "train/outputs_json")
+    TR_LABEL_ROOT = os.path.join(args.root_dir, "train/outputs_json")
+    VAL_LABEL_ROOT = os.path.join("/opt/ml/data", "train/outputs_json")
+
+    snippet = args.root_dir.split("/")[-1][4:]
+    IMG_SIZE = int(snippet) if snippet else 2048
 
     # -- settings
-    use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda" if use_cuda else "cpu")
+    device = args.device
 
     # -- model
     preprocess_input = None
-    if args.smp["use"]:
+    if args.ckpt is not None:
+        exp_path = os.path.join("./outputs", args.ckpt)
+        ckpt_path = os.path.join(exp_path, "best_epoch.pth")
+        model = load_model(args.model, ckpt_path, device)
+    elif args.smp["use"]:
         model_module = getattr(smp, args.model)
         model = model_module(**dict(args.smp["args"])).to(device)
         preprocess_input = get_preprocessing_fn(args.smp["args"]["encoder_name"], args.smp["args"]["encoder_weights"])
@@ -159,18 +176,22 @@ def main(args):
     # -- dataset
     dataset_module = getattr(import_module("datasets.base_dataset"), args.dataset)  # default: XRayDataset
     train_dataset = dataset_module(
-        IMAGE_ROOT, LABEL_ROOT, is_train=True, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
+        IMAGE_ROOT, TR_LABEL_ROOT, is_train=True, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
     )
     valid_dataset = dataset_module(
-        IMAGE_ROOT, LABEL_ROOT, is_train=False, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
+        IMAGE_ROOT, VAL_LABEL_ROOT, is_train=False, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
     )
+
+    opt_module = getattr(import_module("torch.optim"), args.optimizer["type"])  # default: AdamW
+    optimizer = opt_module(filter(lambda p: p.requires_grad, model.parameters()), **dict(args.optimizer["args"]))
 
     # -- augmentation
     transform_module = getattr(import_module("datasets.augmentation"), args.augmentation)  # default: BaseAugmentation
-    transform = transform_module
+    tr_transform = transform_module(img_size=IMG_SIZE, is_train=True)
+    val_transform = transform_module(img_size=IMG_SIZE, is_train=False)
 
-    train_dataset.set_transform(transform)
-    valid_dataset.set_transform(transform)
+    train_dataset.set_transform(tr_transform)
+    valid_dataset.set_transform(val_transform)
 
     # -- data_loader
     train_loader = DataLoader(
@@ -207,7 +228,7 @@ def main(args):
     with open(os.path.join(save_dir, "config.json"), "w", encoding="utf-8") as f:
         args_dict = vars(args)
         args_dict["model_dir"] = save_dir
-        args_dict["TestAugmentation"] = valid_dataset.get_transform().__str__()
+        # args_dict["TestAugmentation"] = valid_dataset.get_transform().__str__()
         json.dump(args_dict, f, ensure_ascii=False, indent=4)
 
     # --train
