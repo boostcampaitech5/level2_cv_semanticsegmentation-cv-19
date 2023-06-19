@@ -2,15 +2,17 @@ import argparse
 import json
 import os
 import pickle
+import time
 from importlib import import_module
 
-import constants
 import numpy as np
 import pandas as pd
+import segmentation_models_pytorch as smp
 import torch
 import torch.nn.functional as F
+
+import constants
 from datasets.base_dataset import XRayInferenceDataset
-import segmentation_models_pytorch as smp
 
 
 def load_model(saved_model, device):
@@ -97,13 +99,16 @@ def test(model, data_loader, thresholds):
 
 @torch.no_grad()
 def inference(data_dir, args, thresholds):
+    start = time.time()
     model = load_model(exp_path, device)
 
     img_root = os.path.join(data_dir, "test/DCM")
     dataset = XRayInferenceDataset(img_path=img_root)
-    if args.augmentation != None:
-        transform = getattr(import_module("datasets.augmentation"), args.augmentation)
+    if args.augmentation is not None:
+        transform_module = getattr(import_module("datasets.augmentation"), args.augmentation)
+        transform = transform_module(img_size=args.img_size, is_train=False)
         dataset.set_transform(transform)
+
     loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=args.batch_size, shuffle=False, num_workers=2, drop_last=False)
 
     print("Calculating inference results..")
@@ -120,9 +125,11 @@ def inference(data_dir, args, thresholds):
     save_path = os.path.join(exp_path, f"{args.exp}.csv")
     df.to_csv(save_path, index=False)
     print(f"Inference Done! Inference result saved at {save_path}")
+    print(f"Inference time : {time.time()-start:.3f}s")
+    print()
 
 
-# python inference.py --exp Baseline
+# python inference.py --exp debug_aug3 --img_size 1024
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
@@ -133,11 +140,12 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default=device, help="device (cuda or cpu)")
     parser.add_argument("--weights", type=str, default="best_epoch.pth", help="model weights file (default: best_epoch.pth)")
     parser.add_argument("--batch_size", type=int, default=4, help="input batch size for validing (default: 4)")
-    parser.add_argument("--augmentation", type=str, default=None, help="augmentation from datasets.augmentation")
+    parser.add_argument("--augmentation", type=str, default="BaseAugmentation", help="augmentation from datasets.augmentation")
     parser.add_argument("--not_use_threshold", action="store_true")
 
     # Container environment
     parser.add_argument("--data_dir", type=str, default=os.environ.get("SM_CHANNEL_EVAL", "/opt/ml/data"))
+    parser.add_argument("--img_size", type=int, default=1024)
 
     args = parser.parse_args()
     exp_path = os.path.join("./outputs", args.exp)

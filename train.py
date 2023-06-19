@@ -11,11 +11,12 @@ import albumentations as albu
 import numpy as np
 import segmentation_models_pytorch as smp
 import torch
-import wandb
-from losses.base_loss import DiceCoef, create_criterion
 from segmentation_models_pytorch.encoders import get_preprocessing_fn
 from torch import cuda
 from torch.utils.data import DataLoader
+
+import wandb
+from losses.base_loss import DiceCoef, create_criterion
 from trainer.trainer import Trainer
 from utils.util import ensure_dir
 
@@ -146,11 +147,14 @@ def main(args):
     ensure_dir(save_dir)
 
     IMAGE_ROOT = os.path.join(args.root_dir, "train/DCM")
-    LABEL_ROOT = os.path.join(args.root_dir, "train/outputs_json")
+    TR_LABEL_ROOT = os.path.join(args.root_dir, "train/outputs_json")
+    VAL_LABEL_ROOT = os.path.join('/opt/ml/data', "train/outputs_json")
+
+    snippet = args.root_dir.split("/")[-1][4:]
+    IMG_SIZE = int(snippet) if snippet else 2048
 
     # -- settings
-    use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda" if use_cuda else "cpu")
+    device = args.device
 
     # -- model
     preprocess_input = None
@@ -171,18 +175,22 @@ def main(args):
     # -- dataset
     dataset_module = getattr(import_module("datasets.base_dataset"), args.dataset)  # default: XRayDataset
     train_dataset = dataset_module(
-        IMAGE_ROOT, LABEL_ROOT, is_train=True, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
+        IMAGE_ROOT, TR_LABEL_ROOT, is_train=True, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
     )
     valid_dataset = dataset_module(
-        IMAGE_ROOT, LABEL_ROOT, is_train=False, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
+        IMAGE_ROOT, VAL_LABEL_ROOT, is_train=False, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
     )
+
+    opt_module = getattr(import_module("torch.optim"), args.optimizer["type"])  # default: AdamW
+    optimizer = opt_module(filter(lambda p: p.requires_grad, model.parameters()), **dict(args.optimizer["args"]))
 
     # -- augmentation
     transform_module = getattr(import_module("datasets.augmentation"), args.augmentation)  # default: BaseAugmentation
-    transform = transform_module
+    tr_transform = transform_module(img_size=IMG_SIZE, is_train=True)
+    val_transform = transform_module(img_size=IMG_SIZE, is_train=False)
 
-    train_dataset.set_transform(transform)
-    valid_dataset.set_transform(transform)
+    train_dataset.set_transform(tr_transform)
+    valid_dataset.set_transform(val_transform)
 
     # -- data_loader
     train_loader = DataLoader(
@@ -211,7 +219,7 @@ def main(args):
     with open(os.path.join(save_dir, "config.json"), "w", encoding="utf-8") as f:
         args_dict = vars(args)
         args_dict["model_dir"] = save_dir
-        args_dict["TestAugmentation"] = valid_dataset.get_transform().__str__()
+        # args_dict["TestAugmentation"] = valid_dataset.get_transform().__str__()
         json.dump(args_dict, f, ensure_ascii=False, indent=4)
 
     # --train
