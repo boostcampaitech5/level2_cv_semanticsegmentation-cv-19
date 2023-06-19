@@ -25,15 +25,6 @@ class BaseAugmentation(object):
             return A.Compose(
                 [
                     A.Resize(self.img_size, self.img_size),
-                    # A.OneOf(
-                    #     [
-                    #         A.HueSaturationValue(hue_shift_limit=0.2, sat_shift_limit=0.2, val_shift_limit=0.2, p=0.9),
-                    #         A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.9),
-                    #     ],
-                    #     p=0.9,
-                    # ),
-                    # A.OneOf([A.Blur(blur_limit=3, p=1.0), A.MedianBlur(blur_limit=3, p=1.0)], p=0.1),
-                    # A.CLAHE(clip_limit=(1, 4), p=1),
                 ]
             )
         else:
@@ -136,3 +127,17 @@ class TestAugmentation(BaseAugmentation):
                 A.Resize(2048, 2048),  # A.Resize(self.img_size, self.img_size),
             ]
         )
+
+
+class CustomAugmentationElastic(BaseAugmentation):
+    def get_transforms(self):
+        if self.is_train:
+            return A.Compose(
+                [A.Resize(self.img_size, self.img_size), A.ElasticTransform(p=1, alpha=60, sigma=120 * 0.05, alpha_affine=120 * 0.03)]
+            )
+        else:
+            return A.Compose(
+                [
+                    A.Resize(self.img_size, self.img_size),
+                ]
+            )

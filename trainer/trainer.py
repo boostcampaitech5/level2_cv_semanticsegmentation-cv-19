@@ -2,9 +2,8 @@ import time
 
 import torch
 import torch.nn.functional as F
-from torch.cuda.amp import GradScaler, autocast
-
 import wandb
+from torch.cuda.amp import GradScaler, autocast
 from trainer.base_trainer import BaseTrainer
 from utils.util import MetricTracker, inf_loop
 
@@ -62,6 +61,11 @@ class Trainer(BaseTrainer):
         self.model.train()
         self.train_metrics.reset()
         for batch_idx, (data, target) in enumerate(self.train_loader):
+            # dt = data[0].numpy()  # .transpose(1, 2, 0)
+            # print(dt.shape)
+            # print(dt.max(), dt.min())
+            # cv2.imwrite(f"./example/elastic3/ex_{batch_idx}.png", dt[0] * 255)
+            # print(data.shape, target.shape)
             data, target = data.to(self.device), target.to(self.device)
             total_loss = 0
 
