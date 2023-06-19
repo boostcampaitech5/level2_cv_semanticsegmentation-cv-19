@@ -145,7 +145,7 @@ if __name__ == "__main__":
     if args.not_use_threshold:
         thresholds = [0.5 for _ in range(29)]
     else:
-        threshold_path = os.path.join(exp_path, "best_dicecoef.p")
+        threshold_path = os.path.join(exp_path, "best_threshold.p")
         assert os.path.isfile(threshold_path), "please run utils/optimize_threshold.py"
         print("Load Best Threshold...  ", end="")
         with open(threshold_path, "rb") as file:
