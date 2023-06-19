@@ -64,6 +64,7 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=config["batch_size"], help="input batch size for training (default: 64)")
 
     parser.add_argument("--model", type=str, default=config["model"], help="model type (default: UNet)")
+    parser.add_argument("--multi_task", type=str, default=config["multi_task"], help="whether use multi_task_loss (default: false)")
     parser.add_argument("--criterion", type=str, default=config["criterion"], help="criterion type (default: bce_with_logit)")
     parser.add_argument("--optimizer", type=str, default=config["optimizer"], help="optimizer type (default: Adam)")
     parser.add_argument("--lr_scheduler", type=str, default=config["lr_scheduler"], help="lr_scheduler type (default: StepLR)")
@@ -148,7 +149,7 @@ def main(args):
 
     IMAGE_ROOT = os.path.join(args.root_dir, "train/DCM")
     TR_LABEL_ROOT = os.path.join(args.root_dir, "train/outputs_json")
-    VAL_LABEL_ROOT = os.path.join('/opt/ml/data', "train/outputs_json")
+    VAL_LABEL_ROOT = os.path.join("/opt/ml/data", "train/outputs_json")
 
     snippet = args.root_dir.split("/")[-1][4:]
     IMG_SIZE = int(snippet) if snippet else 2048
@@ -200,15 +201,23 @@ def main(args):
         num_workers=args.num_workers,
         drop_last=True,
     )
-    valid_loader = DataLoader(dataset=valid_dataset, batch_size=1, shuffle=False, num_workers=2, drop_last=False)
+    valid_loader = DataLoader(dataset=valid_dataset, batch_size=args.batch_size // 2, shuffle=False, num_workers=2, drop_last=False)
 
     # -- loss & metric
     criterion = []
-    for i in args.criterion:
-        criterion.append(create_criterion(i))  # default: [bce_with_logit]
+    if args.multi_task:
+        criterion.append(create_criterion("multi_task", losses_on=args.criterion).to(device))
+    else:
+        for i in args.criterion:
+            criterion.append(create_criterion(i))  # default: [bce_with_logit]
 
     opt_module = getattr(import_module("torch.optim"), args.optimizer["type"])  # default: AdamW
-    optimizer = opt_module(filter(lambda p: p.requires_grad, model.parameters()), **dict(args.optimizer["args"]))
+    if args.multi_task:
+        optimizer = opt_module(
+            list(filter(lambda p: p.requires_grad, model.parameters())) + list(criterion[0].parameters()), **dict(args.optimizer["args"])
+        )
+    else:
+        optimizer = opt_module(filter(lambda p: p.requires_grad, model.parameters()), **dict(args.optimizer["args"]))
 
     sche_module = getattr(import_module("torch.optim.lr_scheduler"), args.lr_scheduler["type"])  # default: ReduceLROnPlateau
     scheduler = sche_module(optimizer, **dict(args.lr_scheduler["args"]))
@@ -239,7 +248,7 @@ def main(args):
     trainer.train()
 
 
-# python train.py --config ./configs/queue/base_config.json
+# python train.py --config ./configs/queue/Unet_mixedPR_grad_accm_multi.json
 if __name__ == "__main__":
     args = parse_args()
     main(args)
