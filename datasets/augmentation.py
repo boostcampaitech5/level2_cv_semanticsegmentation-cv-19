@@ -71,7 +71,7 @@ class CustomAugmentation1(BaseAugmentation):
                     A.OneOf([A.Blur(blur_limit=2, p=1.0), A.MedianBlur(blur_limit=3, p=1.0)], p=0.2),
                     A.HorizontalFlip(p=0.5),
                     A.CLAHE(clip_limit=(1, 4), p=0.5),
-                    A.Cutout(num_holes=10, max_h_size=32, max_w_size=32, fill_value=0, p=0.5),
+                    A.CoarseDropout(max_holes=10, max_height=32, max_width=32, min_holes=8, fill_value=0, p=0.5),
                 ]
             )
         else:
