@@ -1,5 +1,8 @@
 import argparse
+import glob
 import os
+import re
+from pathlib import Path
 
 import cv2
 import matplotlib.pyplot as plt
@@ -71,6 +74,19 @@ PALETTE = [
 ]
 
 
+def increment_path(path):
+    path = Path(path)
+    if not path.exists():
+        return str(path)
+    else:
+        dirs = glob.glob(f"{path}*")
+        matches = [re.search(r"%s(\d+)" % path.stem, d) for d in dirs]
+        i = [int(m.groups()[0]) for m in matches if m]
+        n = max(i) + 1 if i else 2
+
+        return f"{path}{n}"
+
+
 def decode_rle_to_mask(rle, height, width):
     img = np.zeros(height * width, dtype=np.uint8)
     if type(rle) == float:
@@ -107,11 +123,11 @@ def find_image_path(image_name, pngs, image_root):
             return os.path.join(image_root, png)
 
 
-def draw_and_save(cfg):
-    df = pd.read_csv(cfg.file_path)
+def draw_and_save(file_path, save_path, data_path):
+    df = pd.read_csv(file_path)
     pngs = [
-        os.path.relpath(os.path.join(root, fname), start=cfg.data_path)
-        for root, _dirs, files in os.walk(cfg.data_path)
+        os.path.relpath(os.path.join(root, fname), start=data_path)
+        for root, _, files in os.walk(data_path)
         for fname in files
         if os.path.splitext(fname)[1].lower() == ".png"
     ]
@@ -125,29 +141,37 @@ def draw_and_save(cfg):
 
         if len(preds) == 29:
             preds = np.stack(preds, 0)
-            input_image = 255 - cv2.imread(find_image_path(row["image_name"], pngs, cfg.data_path))
+            input_image = 255 - cv2.imread(find_image_path(row["image_name"], pngs, data_path))
             img = np.clip(input_image + label2rgb(preds) / 3, 0, 255).astype(np.uint8)
             plt.axis("off")
             plt.title("Prediction")
             plt.imshow(img)
-            plt.savefig(f"{cfg.save_path}/{row['image_name']}")
+            plt.savefig(f"{save_path}/{row['image_name']}")
             preds = []
             print("Done!")
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-f", "--file_path", type=str, required=True)
-    parser.add_argument("-s", "--save_path", type=str, required=True)
-    parser.add_argument("-d", "--data_path", type=str, required=True)
+    parser.add_argument("--exp", type=str, required=True, help="exp directory address")
+    parser.add_argument("--data_path", "-d", type=str, default=os.environ.get("SM_CHANNEL_EVAL", "/opt/ml/data"))
     args = parser.parse_args()
     return args
 
 
 if __name__ == "__main__":
     cfg = parse_args()
-    assert os.path.isfile(cfg.file_path)
-    assert os.path.isdir(cfg.save_path)
+
     assert os.path.isdir(cfg.data_path)
 
-    draw_and_save(cfg)
+    exp_path = os.path.join("./outputs", cfg.exp)
+    assert os.path.isdir(exp_path)
+
+    file_path = next((file for file in os.listdir(exp_path) if file.endswith(".csv")), None)
+    file_path = os.path.join(exp_path, file_path)
+    assert os.path.isfile(file_path)
+
+    save_path = increment_path(os.path.join(exp_path, "visualize_csv"))
+    os.mkdir(save_path)
+
+    draw_and_save(file_path, save_path, cfg.data_path)
