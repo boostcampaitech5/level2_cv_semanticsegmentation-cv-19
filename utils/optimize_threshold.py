@@ -55,19 +55,6 @@ def encode_mask_to_rle(mask):
     return " ".join(str(x) for x in runs)
 
 
-def decode_rle_to_mask(rle, height, width):
-    s = rle.split()
-    starts, lengths = [np.asarray(x, dtype=int) for x in (s[0:][::2], s[1:][::2])]
-    starts -= 1
-    ends = starts + lengths
-    img = np.zeros(height * width, dtype=np.uint8)
-
-    for lo, hi in zip(starts, ends):
-        img[lo:hi] = 1
-
-    return img.reshape(height, width)
-
-
 def dice_coef(data, label, thr):
     mask = data >= thr
     intersection = np.sum(mask * label)
@@ -86,7 +73,7 @@ def cal_best_thr(model, valid_loader, exp_path, device):
     model.eval()
     with torch.no_grad():
         for idx, (image, label) in enumerate(valid_loader):
-            print(f"Batch_{idx + 1}/{len(valid_loader)} ...   ", end="")
+            print(f"Batch [{idx + 1}/{len(valid_loader)}] Image Shape : {tuple(image.shape)} Label Shape : {tuple(label.shape)}")
             image = image.to(device)
 
             # 추론
@@ -105,7 +92,6 @@ def cal_best_thr(model, valid_loader, exp_path, device):
                 selected_idx = np.logical_not((outputs[i] < 3) * (label[i] == 0))
                 class_total_data[i] = np.concatenate((class_total_data[i], outputs[i][selected_idx]), axis=0)
                 class_total_label[i] = np.concatenate((class_total_label[i], label[i][selected_idx]), axis=0)
-            print("Done!")
 
     # optimize threshold
     print("\nOptimize Threshold ...")
