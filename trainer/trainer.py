@@ -2,9 +2,8 @@ import time
 
 import torch
 import torch.nn.functional as F
-from torch.cuda.amp import GradScaler, autocast
-
 import wandb
+from torch.cuda.amp import GradScaler, autocast
 from trainer.base_trainer import BaseTrainer
 from utils.util import MetricTracker, inf_loop
 
@@ -46,7 +45,12 @@ class Trainer(BaseTrainer):
         self.log_step = args.log_interval
 
         # metric_fn들이 각 df의 index로 들어감
-        self.train_metrics = MetricTracker("Loss", *[c.__class__.__name__ for c in self.criterion])  # DiceCoef
+        if args.multi_task:
+            self.train_metrics = MetricTracker("Loss", *[c for c in self.args.criterion])  # DiceCoef
+            self.log_metrics = MetricTracker(*[f"{c}_var" for c in self.args.criterion])
+        else:
+            self.train_metrics = MetricTracker("Loss", *[c.__class__.__name__ for c in self.criterion])  # DiceCoef
+
         self.valid_metrics = MetricTracker("Loss", *["DiceCoef"])
         # print(self.train_metrics._data.index)  # Index(['Loss', 'FocalLoss', 'DiceLoss', 'IoULoss', 'CombineLoss', 'DiceCoef'], dtype='object')
 
@@ -62,6 +66,11 @@ class Trainer(BaseTrainer):
         self.model.train()
         self.train_metrics.reset()
         for batch_idx, (data, target) in enumerate(self.train_loader):
+            # dt = data[0].detach().cpu().numpy()  # .transpose(1, 2, 0)
+            # print(dt.shape)
+            # print(dt.max(), dt.min())
+            # cv2.imwrite(f"./example/cropAug/ex_{batch_idx}.png", dt[0] * 255)
+
             data, target = data.to(self.device), target.to(self.device)
             total_loss = 0
 
@@ -76,11 +85,20 @@ class Trainer(BaseTrainer):
                 if output_h != mask_h or output_w != mask_w:
                     output = F.interpolate(output, size=(mask_h, mask_w), mode="bilinear")
 
-                for loss_fn in self.criterion:  # [bce_with_logit, ...]
-                    loss = loss_fn(output, target)
-                    # print(f"{loss_fn} : ", loss)
-                    self.train_metrics.update(loss_fn.__class__.__name__, loss.item())  # metric_fn마다 값 update
-                    total_loss += loss
+                if self.args.multi_task:
+                    total_loss, loss_dict, var_dict = self.criterion[0](output, target)
+                    for loss_fn in loss_dict.keys():  # [bce_with_logit, ...]
+                        logging_name = loss_fn
+                        # print(self.train_metrics.result())
+                        # print(self.log_metrics.result())
+                        self.train_metrics.update(logging_name, loss_dict[logging_name].item())  # metric_fn마다 값 update
+                        self.log_metrics.update(f"{logging_name}_var", var_dict[f"{logging_name}_var"].item())
+                else:
+                    for loss_fn in self.criterion:  # [bce_with_logit, ...]
+                        loss = loss_fn(output, target)
+                        # print(f"{loss_fn} : ", loss)
+                        self.train_metrics.update(loss_fn.__class__.__name__, loss.item())  # metric_fn마다 값 update
+                        total_loss += loss
 
             self.scaler.scale(total_loss).backward()
             self.scaler.step(self.optimizer)
@@ -101,6 +119,10 @@ class Trainer(BaseTrainer):
         log = self.train_metrics.result()
         if self.args.is_wandb:
             wandb.log({"Epoch_Train_Loss": log["Loss"]})
+            if self.args.multi_task:
+                log_var_dict = self.log_metrics.result()
+                wandb.log({"Epoch_" + k: v for k, v in log_var_dict.items()})
+
         print("Train Epoch: {}, Loss: {:.6f}".format(epoch, self.train_metrics.result()["Loss"]))
         print(f"train time per epoch: {time.time()-start:.3f}s")
         print()
@@ -115,7 +137,10 @@ class Trainer(BaseTrainer):
         if self.lr_scheduler is not None:
             if self.args.is_wandb:
                 wandb.log({"lr": self.optimizer.param_groups[0]["lr"]})
-            self.lr_scheduler.step(log["val_Loss"])
+            if self.args.lr_scheduler["type"] == "ReduceLROnPlateau":
+                self.lr_scheduler.step(log["val_Loss"])
+            else:
+                self.lr_scheduler.step()
 
         return log
 
@@ -142,8 +167,11 @@ class Trainer(BaseTrainer):
                 if output_h != mask_h or output_w != mask_w:
                     output = F.interpolate(output, size=(mask_h, mask_w), mode="bilinear")
 
-                for loss_fn in self.criterion:  # [bce_with_logit, ...]
-                    total_val_loss += loss_fn(output, target)
+                if self.args.multi_task:
+                    total_val_loss, _, _ = self.criterion[0](output, target)
+                else:
+                    for loss_fn in self.criterion:  # [bce_with_logit, ...]
+                        total_val_loss += loss_fn(output, target)
 
                 output = torch.sigmoid(output)
                 output = (output > thr).detach().cpu()

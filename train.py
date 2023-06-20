@@ -11,11 +11,12 @@ import albumentations as albu
 import numpy as np
 import segmentation_models_pytorch as smp
 import torch
-import wandb
-from losses.base_loss import DiceCoef, create_criterion
 from segmentation_models_pytorch.encoders import get_preprocessing_fn
 from torch import cuda
 from torch.utils.data import DataLoader
+
+import wandb
+from losses.base_loss import DiceCoef, create_criterion
 from trainer.trainer import Trainer
 from utils.util import ensure_dir
 
@@ -62,6 +63,7 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=config["batch_size"], help="input batch size for training (default: 64)")
 
     parser.add_argument("--model", type=str, default=config["model"], help="model type (default: UNet)")
+    parser.add_argument("--multi_task", type=str2bool, default="false", help="whether use multi_task_loss (default: false)")
     parser.add_argument("--criterion", type=str, default=config["criterion"], help="criterion type (default: bce_with_logit)")
     parser.add_argument("--optimizer", type=str, default=config["optimizer"], help="optimizer type (default: Adam)")
     parser.add_argument("--lr_scheduler", type=str, default=config["lr_scheduler"], help="lr_scheduler type (default: StepLR)")
@@ -145,11 +147,14 @@ def main(args):
     ensure_dir(save_dir)
 
     IMAGE_ROOT = os.path.join(args.root_dir, "train/DCM")
-    LABEL_ROOT = os.path.join(args.root_dir, "train/outputs_json")
+    TR_LABEL_ROOT = os.path.join(args.root_dir, "train/outputs_json")
+    VAL_LABEL_ROOT = os.path.join("/opt/ml/data", "train/outputs_json")
+
+    snippet = args.root_dir.split("/")[-1][4:]
+    IMG_SIZE = int(snippet) if snippet else 2048
 
     # -- settings
-    use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda" if use_cuda else "cpu")
+    device = args.device
 
     # -- model
     preprocess_input = None
@@ -170,18 +175,22 @@ def main(args):
     # -- dataset
     dataset_module = getattr(import_module("datasets.base_dataset"), args.dataset)  # default: XRayDataset
     train_dataset = dataset_module(
-        IMAGE_ROOT, LABEL_ROOT, is_train=True, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
+        IMAGE_ROOT, TR_LABEL_ROOT, is_train=True, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
     )
     valid_dataset = dataset_module(
-        IMAGE_ROOT, LABEL_ROOT, is_train=False, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
+        IMAGE_ROOT, VAL_LABEL_ROOT, is_train=False, is_debug=args.is_debug, preprocessing=get_preprocessing(preprocess_input)
     )
+
+    opt_module = getattr(import_module("torch.optim"), args.optimizer["type"])  # default: AdamW
+    optimizer = opt_module(filter(lambda p: p.requires_grad, model.parameters()), **dict(args.optimizer["args"]))
 
     # -- augmentation
     transform_module = getattr(import_module("datasets.augmentation"), args.augmentation)  # default: BaseAugmentation
-    transform = transform_module
+    tr_transform = transform_module(img_size=IMG_SIZE, is_train=True)
+    val_transform = transform_module(img_size=IMG_SIZE, is_train=False)
 
-    train_dataset.set_transform(transform)
-    valid_dataset.set_transform(transform)
+    train_dataset.set_transform(tr_transform)
+    valid_dataset.set_transform(val_transform)
 
     # -- data_loader
     train_loader = DataLoader(
@@ -191,18 +200,32 @@ def main(args):
         num_workers=args.num_workers,
         drop_last=True,
     )
-    valid_loader = DataLoader(dataset=valid_dataset, batch_size=1, shuffle=False, num_workers=2, drop_last=False)
+    valid_loader = DataLoader(dataset=valid_dataset, batch_size=args.batch_size // 2, shuffle=False, num_workers=2, drop_last=False)
 
     # -- loss & metric
     criterion = []
-    for i in args.criterion:
-        criterion.append(create_criterion(i))  # default: [bce_with_logit]
+    if args.multi_task:
+        criterion.append(create_criterion("multi_task", losses_on=args.criterion).to(device))
+    else:
+        for i in args.criterion:
+            criterion.append(create_criterion(i))  # default: [bce_with_logit]
 
     opt_module = getattr(import_module("torch.optim"), args.optimizer["type"])  # default: AdamW
-    optimizer = opt_module(filter(lambda p: p.requires_grad, model.parameters()), **dict(args.optimizer["args"]))
+    if args.multi_task:
+        optimizer = opt_module(
+            list(filter(lambda p: p.requires_grad, model.parameters())) + list(criterion[0].parameters()), **dict(args.optimizer["args"])
+        )
+    else:
+        optimizer = opt_module(filter(lambda p: p.requires_grad, model.parameters()), **dict(args.optimizer["args"]))
 
-    sche_module = getattr(import_module("torch.optim.lr_scheduler"), args.lr_scheduler["type"])  # default: ReduceLROnPlateau
-    scheduler = sche_module(optimizer, **dict(args.lr_scheduler["args"]))
+    if args.lr_scheduler["type"] == "CosineAnnealingWarmupRestarts":
+        from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
+
+        scheduler = CosineAnnealingWarmupRestarts(optimizer, **dict(args.lr_scheduler["args"]))
+    else:
+        sche_module = getattr(import_module("torch.optim.lr_scheduler"), args.lr_scheduler["type"])  # default: ReduceLROnPlateau
+        scheduler = sche_module(optimizer, **dict(args.lr_scheduler["args"]))
+
 
     metrics = [DiceCoef()]
 
@@ -210,7 +233,7 @@ def main(args):
     with open(os.path.join(save_dir, "config.json"), "w", encoding="utf-8") as f:
         args_dict = vars(args)
         args_dict["model_dir"] = save_dir
-        args_dict["TestAugmentation"] = valid_dataset.get_transform().__str__()
+        # args_dict["TestAugmentation"] = valid_dataset.get_transform().__str__()
         json.dump(args_dict, f, ensure_ascii=False, indent=4)
 
     # --train
@@ -230,7 +253,7 @@ def main(args):
     trainer.train()
 
 
-# python train.py --config ./configs/queue/base_config.json
+# python train.py --config ./configs/debug.json
 if __name__ == "__main__":
     args = parse_args()
     main(args)

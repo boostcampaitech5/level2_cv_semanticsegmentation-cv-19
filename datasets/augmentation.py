@@ -37,7 +37,7 @@ class BaseAugmentation(object):
             )
 
 
-class CustomAugmentation(BaseAugmentation):
+class HardAugmentation(BaseAugmentation):
     def get_transforms(self):
         if self.is_train:
             return A.Compose(
@@ -65,12 +65,13 @@ class CustomAugmentation1(BaseAugmentation):
             return A.Compose(
                 [
                     A.Resize(self.img_size, self.img_size),
-                    A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.1, p=0.7),
-                    # A.RandomResizedCrop(1024, 1024, scale=(0.5, 1.0), ratio=(1.0, 1.0), always_apply=False, p=1.0),
-                    # A.ElasticTransform(alpha=15.0, sigma=2.0),
+                    A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.05, p=0.6),
+                    A.ElasticTransform(alpha=15.0, sigma=2.0, alpha_affine=25),
+                    A.ImageCompression(quality_lower=85, quality_upper=95, p=0.1),
                     A.OneOf([A.Blur(blur_limit=2, p=1.0), A.MedianBlur(blur_limit=3, p=1.0)], p=0.2),
                     A.HorizontalFlip(p=0.5),
-                    A.CLAHE(clip_limit=(1, 4), p=0.4),
+                    A.CLAHE(clip_limit=(1, 4), p=0.5),
+                    # A.CoarseDropout(max_holes=10, max_height=32, max_width=32, min_holes=8, fill_value=0, p=0.5),
                 ]
             )
         else:
@@ -81,18 +82,19 @@ class CustomAugmentation1(BaseAugmentation):
             )
 
 
-class CustomAugmentation2(BaseAugmentation):
+class CropAugmentation(BaseAugmentation):
     def get_transforms(self):
         if self.is_train:
             return A.Compose(
                 [
-                    # A.Resize(self.img_size, self.img_size),
-                    # A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.1, p=0.7),
                     A.RandomResizedCrop(1024, 1024, scale=(0.5, 1.0), ratio=(1.0, 1.0), always_apply=False, p=1.0),
-                    # A.ElasticTransform(alpha=15.0, sigma=2.0),
-                    # A.OneOf([A.Blur(blur_limit=2, p=1.0), A.MedianBlur(blur_limit=3, p=1.0)], p=0.2),
-                    # A.HorizontalFlip(p=0.5),
-                    # A.CLAHE(clip_limit=(1, 4), p=0.4),
+                    A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.05, p=0.6),
+                    # A.ElasticTransform(alpha=15.0, sigma=2.0, alpha_affine=25),
+                    # A.ImageCompression(quality_lower=85, quality_upper=95, p=0.1),
+                    A.OneOf([A.Blur(blur_limit=2, p=1.0), A.MedianBlur(blur_limit=3, p=1.0)], p=0.2),
+                    A.HorizontalFlip(p=0.5),
+                    A.CLAHE(clip_limit=(1, 4), p=0.5),
+                    # A.CoarseDropout(max_holes=10, max_height=32, max_width=32, min_holes=8, fill_value=0, p=0.5),
                 ]
             )
         else:
