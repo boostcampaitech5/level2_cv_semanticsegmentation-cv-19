@@ -219,8 +219,14 @@ def main(args):
     else:
         optimizer = opt_module(filter(lambda p: p.requires_grad, model.parameters()), **dict(args.optimizer["args"]))
 
-    sche_module = getattr(import_module("torch.optim.lr_scheduler"), args.lr_scheduler["type"])  # default: ReduceLROnPlateau
-    scheduler = sche_module(optimizer, **dict(args.lr_scheduler["args"]))
+    if args.lr_scheduler["type"] == "CosineAnnealingWarmupRestarts":
+        from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
+
+        scheduler = CosineAnnealingWarmupRestarts(optimizer, **dict(args.lr_scheduler["args"]))
+    else:
+        sche_module = getattr(import_module("torch.optim.lr_scheduler"), args.lr_scheduler["type"])  # default: ReduceLROnPlateau
+        scheduler = sche_module(optimizer, **dict(args.lr_scheduler["args"]))
+
 
     metrics = [DiceCoef()]
 

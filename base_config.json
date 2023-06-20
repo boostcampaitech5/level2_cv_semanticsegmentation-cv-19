@@ -33,12 +33,14 @@
         }
     },
     "lr_scheduler": {
-        "type": "ReduceLROnPlateau",
+        "type": "CosineAnnealingWarmupRestarts",
         "args": {
-            "mode": "min",
-            "factor": 0.1,
-            "patience": 3,
-            "verbose": true
+            "first_cycle_steps": 1000,
+            "cycle_mult": 2.0,
+            "max_lr": 1e-4,
+            "min_lr": 1e-5,
+            "warmup_steps": 50,
+            "gamma": 0.8
         }
     },
     "num_workers": 4
