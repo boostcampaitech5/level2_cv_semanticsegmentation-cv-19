@@ -46,7 +46,6 @@ class CustomAugmentation(BaseAugmentation):
                     A.ElasticTransform(alpha=15.0, sigma=2.0),
                     A.OneOf([A.Blur(blur_limit=2, p=1.0), A.MedianBlur(blur_limit=3, p=1.0)], p=0.2),
                     A.HorizontalFlip(p=0.5),
-                    A.CLAHE(clip_limit=(1, 4), p=0.6),
                 ]
             )
         else:
@@ -128,6 +127,23 @@ class CustomAugmentationElastic(BaseAugmentation):
         if self.is_train:
             return A.Compose(
                 [A.Resize(self.img_size, self.img_size), A.ElasticTransform(p=1, alpha=60, sigma=120 * 0.05, alpha_affine=120 * 0.03)]
+            )
+        else:
+            return A.Compose(
+                [
+                    A.Resize(self.img_size, self.img_size),
+                ]
+            )
+
+
+class CustomAugmentationElastic_9733all(BaseAugmentation):
+    def get_transforms(self):
+        if self.is_train:
+            return A.Compose(
+                [
+                    A.Resize(self.img_size, self.img_size),
+                    A.ElasticTransform(p=1, alpha=60, sigma=120 * 0.05, alpha_affine=120 * 0.03),
+                ]
             )
         else:
             return A.Compose(
