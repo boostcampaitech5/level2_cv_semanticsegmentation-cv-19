@@ -37,7 +37,7 @@ class BaseAugmentation(object):
             )
 
 
-class CustomAugmentation(BaseAugmentation):
+class HardAugmentation(BaseAugmentation):
     def get_transforms(self):
         if self.is_train:
             return A.Compose(
@@ -67,7 +67,7 @@ class CustomAugmentation1(BaseAugmentation):
                     A.Resize(self.img_size, self.img_size),
                     A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.05, p=0.6),
                     A.ElasticTransform(alpha=15.0, sigma=2.0, alpha_affine=25),
-                    A.JpegCompression(quality_lower=85, quality_upper=95, p=0.1),
+                    A.ImageCompression(quality_lower=85, quality_upper=95, p=0.1),
                     A.OneOf([A.Blur(blur_limit=2, p=1.0), A.MedianBlur(blur_limit=3, p=1.0)], p=0.2),
                     A.HorizontalFlip(p=0.5),
                     A.CLAHE(clip_limit=(1, 4), p=0.5),
