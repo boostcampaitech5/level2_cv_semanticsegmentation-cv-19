@@ -81,7 +81,7 @@ if __name__ == "__main__":
         with open(thr_path, "rb") as file:
             combined_thresholds.append(pickle.load(file))
 
-    combined_thresholds = np.array(combined_thresholds).mean(axis=0)
+    combined_thresholds = np.array(combined_thresholds).sum(axis=0)
 
     # 앙상블 수행
     print("Ensemble...")
