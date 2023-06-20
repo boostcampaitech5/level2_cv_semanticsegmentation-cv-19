@@ -64,7 +64,7 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=config["batch_size"], help="input batch size for training (default: 64)")
 
     parser.add_argument("--model", type=str, default=config["model"], help="model type (default: UNet)")
-    parser.add_argument("--multi_task", type=str, default=config["multi_task"], help="whether use multi_task_loss (default: false)")
+    parser.add_argument("--multi_task", type=str2bool, default="false", help="whether use multi_task_loss (default: false)")
     parser.add_argument("--criterion", type=str, default=config["criterion"], help="criterion type (default: bce_with_logit)")
     parser.add_argument("--optimizer", type=str, default=config["optimizer"], help="optimizer type (default: Adam)")
     parser.add_argument("--lr_scheduler", type=str, default=config["lr_scheduler"], help="lr_scheduler type (default: StepLR)")
@@ -248,7 +248,7 @@ def main(args):
     trainer.train()
 
 
-# python train.py --config ./configs/queue/Unet_mixedPR_grad_accm_multi.json
+# python train.py --config ./configs/debug.json
 if __name__ == "__main__":
     args = parse_args()
     main(args)
