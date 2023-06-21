@@ -136,6 +136,50 @@ class CustomAugmentationElastic(BaseAugmentation):
             )
 
 
+class CustomAugmentation1_elastic(BaseAugmentation):
+    def get_transforms(self):
+        if self.is_train:
+            return A.Compose(
+                [
+                    A.Resize(self.img_size, self.img_size),
+                    A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.1, p=0.7),
+                    # A.RandomResizedCrop(1024, 1024, scale=(0.5, 1.0), ratio=(1.0, 1.0), always_apply=False, p=1.0),
+                    A.ElasticTransform(p=1, alpha=60, sigma=60 * 0.10, alpha_affine=60 * 0.06),
+                    A.OneOf([A.Blur(blur_limit=2, p=1.0), A.MedianBlur(blur_limit=3, p=1.0)], p=0.2),
+                    A.HorizontalFlip(p=0.5),
+                    A.CLAHE(clip_limit=(1, 4), p=0.4),
+                ]
+            )
+        else:
+            return A.Compose(
+                [
+                    A.Resize(self.img_size, self.img_size),
+                ]
+            )
+
+
+class CustomAugmentation1_nonelastic(BaseAugmentation):
+    def get_transforms(self):
+        if self.is_train:
+            return A.Compose(
+                [
+                    A.Resize(self.img_size, self.img_size),
+                    A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.1, p=0.7),
+                    # A.RandomResizedCrop(1024, 1024, scale=(0.5, 1.0), ratio=(1.0, 1.0), always_apply=False, p=1.0),
+                    # A.ElasticTransform(p=1, alpha=60, sigma=60 * 0.10, alpha_affine=60 * 0.06,
+                    A.OneOf([A.Blur(blur_limit=2, p=1.0), A.MedianBlur(blur_limit=3, p=1.0)], p=0.2),
+                    A.HorizontalFlip(p=0.5),
+                    A.CLAHE(clip_limit=(1, 4), p=0.4),
+                ]
+            )
+        else:
+            return A.Compose(
+                [
+                    A.Resize(self.img_size, self.img_size),
+                ]
+            )
+
+
 class CustomAugmentationElastic_9733all(BaseAugmentation):
     def get_transforms(self):
         if self.is_train:
