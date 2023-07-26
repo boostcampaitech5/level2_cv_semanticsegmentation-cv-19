@@ -35,7 +35,7 @@
 |-----|---|
 |김서인| train data 시각화 EDA, U-Net 및 smp 모델 베이스라인 구축, hard voting ensemble 및 debug mode 구현|
 |문상인| Baseline 구축, EDA, Loss fn 구현, Segformer/Mask2former 실험 |
-|박재훈| hugging-face 코드 구축, Ensemble 구현, 마스킹 임계값 최적화, 모델 추론 시각화|
+|박재훈| hugging-face 모델 코드 구축, Ensemble 구현, 마스킹 임계값 최적화, 모델 추론 시각화|
 |이강민| DeepLab 베이스라인 구축 및 실험 진행, U-Net 실험|
 |전지수| PM, mmseg 베이스라인 구축 및 실험 시도, Convnext  실험|
 
@@ -68,7 +68,7 @@
 # **실행 방법**
 #### **install requirements**
 
-`pip install -r mmdetection/requirements.txt`
+`pip install -r requirements.txt`
 #### **train**
 
 ``./configs/queue`` 폴더에 base_config.json와 같은 형식의 config 파일 작성
@@ -111,7 +111,7 @@
 ### 2. Notion
 
 ### 3. WandB
-- MMDetWandbHook을 통해 실험 결과를 wandb 상에 validation Dice, train loss, train acc를 포함한 config setting 값들을 로깅하였다.
+- validation Dice, train/val loss learning rate 등 실험 결과와 config.json setting 값들을 로깅하였다.
 
 ----
 
