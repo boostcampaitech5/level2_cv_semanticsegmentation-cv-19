@@ -1,7 +1,6 @@
 import json
 import os
 
-import albumentations as A
 import cv2
 import numpy as np
 import torch
@@ -41,7 +40,7 @@ def collect_img_json(IMAGE_ROOT, LABEL_ROOT):
     return pngs, jsons
 
 
-def split_filename(is_train, pngs, jsons):
+def split_filename(is_train, pngs, jsons, is_debug):
     # split train-valid
     # 한 폴더 안에 한 인물의 양손에 대한 `.png` 파일이 존재하기 때문에
     # 폴더 이름을 그룹으로 해서 GroupKFold를 수행합니다.
@@ -53,8 +52,10 @@ def split_filename(is_train, pngs, jsons):
 
     # 전체 데이터의 20%를 validation data로 쓰기 위해 `n_splits`를
     # 5으로 설정하여 GroupKFold를 수행합니다.
-    gkf = GroupKFold(n_splits=5)
-
+    if is_debug:
+        gkf = GroupKFold(n_splits=25)
+    else:
+        gkf = GroupKFold(n_splits=5)
     train_filenames = []
     train_labelnames = []
     valid_filenames = []
@@ -65,31 +66,28 @@ def split_filename(is_train, pngs, jsons):
             valid_filenames += list(pngs[y])
             valid_labelnames += list(jsons[y])
 
-        else:
+        elif i < 5:
             train_filenames += list(pngs[y])
             train_labelnames += list(jsons[y])
 
     return [train_filenames, train_labelnames] if is_train else [valid_filenames, valid_labelnames]
 
-# Normalize를 할 경우, cv2.imread에서 에러 발생, OpenCV depth of image unsupported (CV_64F)
-BaseAugmentation = A.Compose(
-    [
-        A.Resize(512, 512),
-        # A.ColorJitter(0.5, 0.5, 0.5, 0.25),
-        # A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
-    ]
-)
-
 
 class XRayDataset(Dataset):
-    def __init__(self, IMAGE_ROOT, LABEL_ROOT, transforms=BaseAugmentation, is_train=False):
+    def __init__(self, IMAGE_ROOT, LABEL_ROOT, transforms=None, is_train=False, is_debug=False, preprocessing=None):
         self.is_train = is_train
         self.transforms = transforms
         self.IMAGE_ROOT = IMAGE_ROOT
         self.LABEL_ROOT = LABEL_ROOT
-
+        self.preprocessing = preprocessing
         pngs, jsons = collect_img_json(IMAGE_ROOT, LABEL_ROOT)
-        self.filenames, self.labelnames = split_filename(is_train, pngs, jsons)
+        self.filenames, self.labelnames = split_filename(is_train, pngs, jsons, is_debug)
+
+    def set_transform(self, transforms):
+        self.transforms = transforms
+
+    def get_transform(self):
+        return self.transforms
 
     def __len__(self):
         return len(self.filenames)
@@ -99,13 +97,16 @@ class XRayDataset(Dataset):
         image_path = os.path.join(self.IMAGE_ROOT, image_name)
 
         image = cv2.imread(image_path)
-        image = image / 255.0  # normalize
+        if self.is_train:
+            img_size = image.shape
+        else:
+            img_size = (2048, 2048, 29)
 
         label_name = self.labelnames[item]
         label_path = os.path.join(self.LABEL_ROOT, label_name)
 
         # process a label of shape (H, W, NC)
-        label_shape = tuple(image.shape[:2]) + (len(constants.CLASSES),)
+        label_shape = tuple(img_size[:2]) + (len(constants.CLASSES),)
         label = np.zeros(label_shape, dtype=np.uint8)
 
         # read label file
@@ -120,33 +121,63 @@ class XRayDataset(Dataset):
             points = np.array(ann["points"])
 
             # polygon to mask
-            class_label = np.zeros(image.shape[:2], dtype=np.uint8)
+            class_label = np.zeros(img_size[:2], dtype=np.uint8)
             cv2.fillPoly(class_label, [points], 1)
             label[..., class_ind] = class_label
 
         if self.transforms is not None:
-            inputs = {"image": image, "mask": label} if self.is_train else {"image": image}
-            result = self.transforms(**inputs)
-
-            image = result["image"]
-            label = result["mask"] if self.is_train else label
+            if self.is_train:
+                image, label = self.transforms(image, label)
+            else:
+                image, _ = self.transforms(image)
 
         # to tenser will be done later
         image = image.transpose(2, 0, 1)  # make channel first
         label = label.transpose(2, 0, 1)
 
-        image = torch.from_numpy(image).float()
+        image = torch.from_numpy(image).float() / 255.0
         label = torch.from_numpy(label).float()
+
+        # image = image.float() / 255.0
+        # label = label.reshape(29, *image.shape[1:]).float()
+        # print(type(image), type(label))
 
         return image, label
 
-    # utility function, this does not care overlap
-    @staticmethod
-    def label2rgb(label):
-        image_size = label.shape[1:] + (3,)
-        image = np.zeros(image_size, dtype=np.uint8)
 
-        for i, class_label in enumerate(label):
-            image[class_label == 1] = constants.PALETTE[i]
+class XRayInferenceDataset(Dataset):
+    def __init__(self, img_path, transforms=None):
+        pngs = {
+            os.path.relpath(os.path.join(root, fname), start=img_path)
+            for root, _dirs, files in os.walk(img_path)
+            for fname in files
+            if os.path.splitext(fname)[1].lower() == ".png"
+        }
+        _filenames = pngs
+        _filenames = np.array(sorted(_filenames))
+        self.img_path = img_path
+        self.filenames = _filenames
+        self.transforms = transforms
 
-        return image
+    def set_transform(self, transforms):
+        self.transforms = transforms
+
+    def get_transform(self):
+        return self.transforms
+
+    def __len__(self):
+        return len(self.filenames)
+
+    def __getitem__(self, item):
+        image_name = self.filenames[item]
+        image_path = os.path.join(self.img_path, image_name)
+
+        image = cv2.imread(image_path)
+
+        if self.transforms is not None:
+            image, _ = self.transforms(image)
+
+        image = image.transpose(2, 0, 1)  # make channel first
+        image = torch.from_numpy(image).float() / 255.0
+
+        return image, image_name

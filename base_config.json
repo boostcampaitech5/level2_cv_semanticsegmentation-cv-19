@@ -1,32 +1,47 @@
 {
     "name": "Baseline",
+    "root_dir": "/opt/ml/data1024",
     "seed": 21,
     "epochs": 250,
     "early_stop": 10,
     "save_interval": 1,
     "log_interval": 20,
     "is_wandb": false,
+    "is_debug": true,
+    "smp": {
+        "use": true,
+        "args": {
+            "encoder_name": "efficientnet-b7",
+            "encoder_weights": "imagenet",
+            "in_channels": 3,
+            "classes": 29
+        }
+    },
     "dataset": "XRayDataset",
+    "augmentation": "BaseAugmentation",
     "batch_size": 8,
-    "model": "UNet",
+    "iters_to_accumulate": 1,
+    "model": "Unet",
     "criterion": [
-        "bce_with_logit"
+        "combo_loss"
     ],
     "optimizer": {
         "type": "AdamW",
         "args": {
-            "lr": 1e-3,
-            "weight_decay": 1e-4
+            "lr": 1e-4,
+            "weight_decay": 1e-5
         }
     },
     "lr_scheduler": {
-        "type": "ReduceLROnPlateau",
+        "type": "CosineAnnealingWarmupRestarts",
         "args": {
-            "mode": "min",
-            "factor": 0.1,
-            "patience": 5,
-            "verbose": true
+            "first_cycle_steps": 1000,
+            "cycle_mult": 2.0,
+            "max_lr": 1e-4,
+            "min_lr": 1e-5,
+            "warmup_steps": 50,
+            "gamma": 0.8
         }
     },
-    "num_workers": 8
+    "num_workers": 4
 }

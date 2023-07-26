@@ -106,16 +106,3 @@ class UNet(BaseModel):
 
         output = self.score_fr(dec1_1)
         return output
-
-
-class MyModel(BaseModel):
-    """
-    Implement this module with your own idea
-    """
-
-    def __init__(self, num_classes=len(constants.CLASSES)):
-        super(BaseModel, self).__init__()
-        pass
-
-    def forward(self, x):
-        return x

@@ -105,7 +105,7 @@ data/
 input/
 saved/
 #datasets/
-
+/example
 # editor, os cache directory
 .vscode/
 .idea/
@@ -115,4 +115,8 @@ __MACOSX/
 wandb/
 outputs/
 configs/
-codebook/
+code_testing/
+log*.txt
+streamlit/
+deprecated/
+example/
